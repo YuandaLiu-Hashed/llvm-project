@@ -806,6 +806,9 @@ AsmParser::AsmParser(SourceMgr &SM, MCContext &Ctx, MCStreamer &Out,
   case MCContext::IsDXContainer:
     llvm_unreachable("DXContainer is not supported yet");
     break;
+  case MCContext::IsScott8:
+    llvm_unreachable("Scott8 is not supported yet");
+    break;
   }
 
   PlatformParser->Initialize(*this);

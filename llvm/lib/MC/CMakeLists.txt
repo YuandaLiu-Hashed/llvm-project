@@ -38,11 +38,14 @@ add_llvm_component_library(LLVMMC
   MCPseudoProbe.cpp
   MCRegisterInfo.cpp
   MCSchedule.cpp
+  MCScott8ObjectTargetWriter.cpp
+  MCScott8Streamer.cpp
   MCSection.cpp
   MCSectionCOFF.cpp
   MCSectionDXContainer.cpp
   MCSectionELF.cpp
   MCSectionMachO.cpp
+  MCSectionScott8.cpp
   MCSectionWasm.cpp
   MCSectionXCOFF.cpp
   MCStreamer.cpp
@@ -61,6 +64,7 @@ add_llvm_component_library(LLVMMC
   MCWinEH.cpp
   MCXCOFFObjectTargetWriter.cpp
   MCXCOFFStreamer.cpp
+  Scott8ObjectWriter.cpp
   MachObjectWriter.cpp
   SPIRVObjectWriter.cpp
   StringTableBuilder.cpp

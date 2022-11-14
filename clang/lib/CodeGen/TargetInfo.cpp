@@ -11326,6 +11326,22 @@ public:
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Scott8 ABI Implementation.
+//===----------------------------------------------------------------------===//
+ namespace {
+  class Scott8ABIInfo : public DefaultABIInfo {
+  public:
+     Scott8ABIInfo(CodeGen::CodeGenTypes &CGT) : DefaultABIInfo(CGT) {}
+  };
+
+  class Scott8TargetCodeGenInfo : public TargetCodeGenInfo {
+  public:
+      Scott8TargetCodeGenInfo(CodeGenTypes &CGT)
+      : TargetCodeGenInfo(std::make_unique<Scott8ABIInfo>(CGT)) {}
+  };
+ }
+
+//===----------------------------------------------------------------------===//
 // VE ABI Implementation.
 //
 namespace {
@@ -12259,6 +12275,8 @@ const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
     return SetCGInfo(new AMDGPUTargetCodeGenInfo(Types));
   case llvm::Triple::amdgcn:
     return SetCGInfo(new AMDGPUTargetCodeGenInfo(Types));
+  case llvm::Triple::scott8:
+     return SetCGInfo(new Scott8TargetCodeGenInfo(Types));
   case llvm::Triple::sparc:
     return SetCGInfo(new SparcV8TargetCodeGenInfo(Types));
   case llvm::Triple::sparcv9:

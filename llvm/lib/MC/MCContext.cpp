@@ -33,6 +33,7 @@
 #include "llvm/MC/MCSectionSPIRV.h"
 #include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCSectionXCOFF.h"
+#include "llvm/MC/MCSectionScott8.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
@@ -42,6 +43,7 @@
 #include "llvm/MC/MCSymbolMachO.h"
 #include "llvm/MC/MCSymbolWasm.h"
 #include "llvm/MC/MCSymbolXCOFF.h"
+#include "llvm/MC/MCSymbolScott8.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/SectionKind.h"
 #include "llvm/Support/Casting.h"
@@ -115,6 +117,9 @@ MCContext::MCContext(const Triple &TheTriple, const MCAsmInfo *mai,
   case Triple::SPIRV:
     Env = IsSPIRV;
     break;
+  case Triple::Scott8:
+    Env = IsScott8;
+    break;
   case Triple::UnknownObjectFormat:
     report_fatal_error("Cannot initialize MC for unknown object file format.");
     break;
@@ -154,6 +159,7 @@ void MCContext::reset() {
   XCOFFAllocator.DestroyAll();
   MCInstAllocator.DestroyAll();
   SPIRVAllocator.DestroyAll();
+  Scott8Allocator.DestroyAll();
 
   MCSubtargetAllocator.DestroyAll();
   InlineAsmUsedLabelNames.clear();
@@ -179,6 +185,7 @@ void MCContext::reset() {
   WasmUniquingMap.clear();
   XCOFFUniquingMap.clear();
   DXCUniquingMap.clear();
+  Scott8UniquingMap.clear();
 
   ELFEntrySizeMap.clear();
   ELFSeenGenericMergeableSections.clear();
@@ -257,6 +264,8 @@ MCSymbol *MCContext::createSymbolImpl(const StringMapEntry<bool> *Name,
     return new (Name, *this) MCSymbolMachO(Name, IsTemporary);
   case MCContext::IsWasm:
     return new (Name, *this) MCSymbolWasm(Name, IsTemporary);
+  case MCContext::IsScott8:
+    return new (Name, *this) MCSymbolScott8(Name, IsTemporary);
   case MCContext::IsXCOFF:
     return createXCOFFSymbolImpl(Name, IsTemporary);
   case MCContext::IsDXContainer:
@@ -873,6 +882,27 @@ MCSectionDXContainer *MCContext::getDXContainerSection(StringRef Section,
   F->setParent(MapIt->second);
 
   return MapIt->second;
+}
+
+MCSectionScott8 *MCContext::getScott8Section(const Twine &Section, SectionKind K) {
+  auto IterBool = Scott8UniquingMap.insert(std::make_pair(Scott8SectionKey{Section.str()}, nullptr));
+  auto &Entry = *IterBool.first;
+  if (!IterBool.second)
+    return Entry.second;
+
+  StringRef CachedName = Entry.first.SectionName;
+
+  MCSymbol *Begin = createSymbol(CachedName, false, false);
+
+  MCSectionScott8 *Result = new (Scott8Allocator.Allocate()) MCSectionScott8(CachedName, K, Begin);
+  Entry.second = Result;
+
+  auto *F = new MCDataFragment();
+  Result->getFragmentList().insert(Result->begin(), F);
+  F->setParent(Result);
+  Begin->setFragment(F);
+
+  return Result;
 }
 
 MCSubtargetInfo &MCContext::getSubtargetCopy(const MCSubtargetInfo &STI) {

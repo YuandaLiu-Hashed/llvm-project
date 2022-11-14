@@ -119,6 +119,11 @@ MCStreamer *createDXContainerStreamer(MCContext &Ctx,
                                       std::unique_ptr<MCObjectWriter> &&OW,
                                       std::unique_ptr<MCCodeEmitter> &&CE,
                                       bool RelaxAll);
+MCStreamer *createScott8Streamer(MCContext &Ctx,
+                                 std::unique_ptr<MCAsmBackend> &&TAB,
+                                 std::unique_ptr<MCObjectWriter> &&OW,
+                                 std::unique_ptr<MCCodeEmitter> &&CE,
+                                 bool RelaxAll);
 
 MCRelocationInfo *createMCRelocationInfo(const Triple &TT, MCContext &Ctx);
 
@@ -611,7 +616,12 @@ public:
         S = createDXContainerStreamer(Ctx, std::move(TAB), std::move(OW),
                                       std::move(Emitter), RelaxAll);
       break;
+    case Triple::Scott8:
+      S = createScott8Streamer(Ctx, std::move(TAB), std::move(OW),
+                               std::move(Emitter), RelaxAll);
+      break;
     }
+
     if (ObjectTargetStreamerCtorFn)
       ObjectTargetStreamerCtorFn(*S, STI);
     return S;

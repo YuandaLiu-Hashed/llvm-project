@@ -56,6 +56,7 @@ class MCSectionMachO;
 class MCSectionSPIRV;
 class MCSectionWasm;
 class MCSectionXCOFF;
+class MCSectionScott8;
 class MCStreamer;
 class MCSubtargetInfo;
 class MCSymbol;
@@ -87,7 +88,8 @@ public:
     IsSPIRV,
     IsWasm,
     IsXCOFF,
-    IsDXContainer
+    IsDXContainer,
+    IsScott8
   };
 
 private:
@@ -137,6 +139,7 @@ private:
   SpecificBumpPtrAllocator<MCSectionSPIRV> SPIRVAllocator;
   SpecificBumpPtrAllocator<MCSectionWasm> WasmAllocator;
   SpecificBumpPtrAllocator<MCSectionXCOFF> XCOFFAllocator;
+  SpecificBumpPtrAllocator<MCSectionScott8> Scott8Allocator;
   SpecificBumpPtrAllocator<MCInst> MCInstAllocator;
 
   /// Bindings of names to symbols.
@@ -343,6 +346,17 @@ private:
     }
   };
 
+  struct Scott8SectionKey {
+    std::string SectionName;
+
+    explicit Scott8SectionKey(StringRef SectionName)
+        : SectionName(SectionName) {}
+
+    bool operator<(const Scott8SectionKey &Other) const {
+      return SectionName < Other.SectionName;
+    }
+  };
+
   StringMap<MCSectionMachO *> MachOUniquingMap;
   std::map<ELFSectionKey, MCSectionELF *> ELFUniquingMap;
   std::map<COFFSectionKey, MCSectionCOFF *> COFFUniquingMap;
@@ -350,6 +364,7 @@ private:
   std::map<WasmSectionKey, MCSectionWasm *> WasmUniquingMap;
   std::map<XCOFFSectionKey, MCSectionXCOFF *> XCOFFUniquingMap;
   StringMap<MCSectionDXContainer *> DXCUniquingMap;
+  std::map<Scott8SectionKey, MCSectionScott8 *> Scott8UniquingMap;
   StringMap<bool> RelSecNames;
 
   SpecificBumpPtrAllocator<MCSubtargetInfo> MCSubtargetAllocator;
@@ -671,6 +686,8 @@ public:
 
   bool hasXCOFFSection(StringRef Section,
                        XCOFF::CsectProperties CsectProp) const;
+
+  MCSectionScott8 *getScott8Section(const Twine &Section, SectionKind K);
 
   MCSectionXCOFF *getXCOFFSection(
       StringRef Section, SectionKind K,

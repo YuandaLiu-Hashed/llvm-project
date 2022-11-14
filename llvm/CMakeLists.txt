@@ -431,6 +431,7 @@ set(LLVM_ALL_TARGETS
   NVPTX
   PowerPC
   RISCV
+  Scott8
   Sparc
   SystemZ
   VE

@@ -22,6 +22,7 @@
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCSectionSPIRV.h"
 #include "llvm/MC/MCSectionWasm.h"
+#include "llvm/MC/MCSectionScott8.h"
 #include "llvm/MC/MCSectionXCOFF.h"
 #include "llvm/Support/Casting.h"
 
@@ -1025,6 +1026,10 @@ void MCObjectFileInfo::initDXContainerObjectFileInfo(const Triple &T) {
   TextSection = Ctx->getDXContainerSection("DXBC", SectionKind::getText());
 }
 
+void MCObjectFileInfo::initScott8ObjectFileInfo(const Triple &T) {
+  TextSection = Ctx->getScott8Section(".thesection", SectionKind::getText());
+}
+
 MCObjectFileInfo::~MCObjectFileInfo() = default;
 
 void MCObjectFileInfo::initMCObjectFileInfo(MCContext &MCCtx, bool PIC,
@@ -1075,6 +1080,9 @@ void MCObjectFileInfo::initMCObjectFileInfo(MCContext &MCCtx, bool PIC,
   case MCContext::IsDXContainer:
     initDXContainerObjectFileInfo(TheTriple);
     break;
+  case MCContext::IsScott8:
+    initScott8ObjectFileInfo(TheTriple);
+    break;
   }
 }
 
@@ -1093,6 +1101,7 @@ MCSection *MCObjectFileInfo::getDwarfComdatSection(const char *Name,
   case Triple::SPIRV:
   case Triple::XCOFF:
   case Triple::DXContainer:
+  case Triple::Scott8:
   case Triple::UnknownObjectFormat:
     report_fatal_error("Cannot get DWARF comdat section for this object file "
                        "format: not implemented.");

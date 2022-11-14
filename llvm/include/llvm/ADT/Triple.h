@@ -74,6 +74,7 @@ public:
     amdgcn,         // AMDGCN: AMD GCN GPUs
     riscv32,        // RISC-V (32-bit): riscv32
     riscv64,        // RISC-V (64-bit): riscv64
+    scott8,         // Scott (8-bit): scott8
     sparc,          // Sparc: sparc
     sparcv9,        // Sparcv9: Sparcv9
     sparcel,        // Sparc: (endianness = little). NB: 'Sparcle' is a CPU variant
@@ -281,6 +282,7 @@ public:
     SPIRV,
     Wasm,
     XCOFF,
+    Scott8,
   };
 
 private:
@@ -665,6 +667,11 @@ public:
   /// Tests whether the OS uses the ELF binary format.
   bool isOSBinFormatELF() const {
     return getObjectFormat() == Triple::ELF;
+  }
+
+  /// Tests whether the OS uses the Scott8 binary format.
+  bool isScottEmulator() const {
+    return getObjectFormat() == Triple::Scott8;
   }
 
   /// Tests whether the OS uses the COFF binary format.

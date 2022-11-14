@@ -200,6 +200,19 @@ private:
   void emitLinkerDirectives(MCStreamer &Streamer, Module &M) const;
 };
 
+class TargetLoweringObjectFileScott8 : public TargetLoweringObjectFile {
+  mutable unsigned NextUniqueID = 0;
+public:
+  TargetLoweringObjectFileScott8() = default;
+  ~TargetLoweringObjectFileScott8() override = default;
+
+  MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
+                                      const TargetMachine &TM) const override;
+
+  MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
+                                    const TargetMachine &TM) const override;
+};
+
 class TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {
   mutable unsigned NextUniqueID = 0;
 

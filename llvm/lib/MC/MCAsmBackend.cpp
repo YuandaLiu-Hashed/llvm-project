@@ -17,6 +17,7 @@
 #include "llvm/MC/MCWasmObjectWriter.h"
 #include "llvm/MC/MCWinCOFFObjectWriter.h"
 #include "llvm/MC/MCXCOFFObjectWriter.h"
+#include "llvm/MC/MCScott8ObjectWriter.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -52,6 +53,9 @@ MCAsmBackend::createObjectWriter(raw_pwrite_stream &OS) const {
   case Triple::DXContainer:
     return createDXContainerObjectWriter(
         cast<MCDXContainerTargetWriter>(std::move(TW)), OS);
+  case Triple::Scott8:
+    return createScott8ObjectWriter(
+        cast<MCScott8ObjectTargetWriter>(std::move(TW)), OS);
   default:
     llvm_unreachable("unexpected object format");
   }

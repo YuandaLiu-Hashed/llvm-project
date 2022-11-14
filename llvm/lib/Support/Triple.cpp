@@ -63,6 +63,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case renderscript64: return "renderscript64";
   case riscv32:        return "riscv32";
   case riscv64:        return "riscv64";
+  case scott8:         return "scott8";
   case shave:          return "shave";
   case sparc:          return "sparc";
   case sparcel:        return "sparcel";
@@ -163,6 +164,8 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
 
   case riscv32:
   case riscv64:     return "riscv";
+
+  case scott8:      return "scott";
 
   case ve:          return "ve";
   case csky:        return "csky";
@@ -332,6 +335,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("amdgcn", amdgcn)
     .Case("riscv32", riscv32)
     .Case("riscv64", riscv64)
+    .Case("scott8", scott8)
     .Case("hexagon", hexagon)
     .Case("sparc", sparc)
     .Case("sparcel", sparcel)
@@ -477,6 +481,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("amdgcn", Triple::amdgcn)
     .Case("riscv32", Triple::riscv32)
     .Case("riscv64", Triple::riscv64)
+    .Case("scott8", Triple::scott8)
     .Case("hexagon", Triple::hexagon)
     .Cases("s390x", "systemz", Triple::systemz)
     .Case("sparc", Triple::sparc)
@@ -774,6 +779,8 @@ static StringRef getObjectFormatTypeName(Triple::ObjectFormatType Kind) {
     return "dxcontainer";
   case Triple::SPIRV:
     return "spirv";
+  case Triple::Scott8:
+    return "scott8";
   }
   llvm_unreachable("unknown object format type");
 }
@@ -827,6 +834,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::renderscript64:
   case Triple::riscv32:
   case Triple::riscv64:
+  case Triple::scott8:
   case Triple::shave:
   case Triple::sparc:
   case Triple::sparcel:
@@ -1380,6 +1388,9 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::UnknownArch:
     return 0;
 
+  case llvm::Triple::scott8:
+    return 8;
+
   case llvm::Triple::avr:
   case llvm::Triple::msp430:
     return 16;
@@ -1469,6 +1480,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::bpfeb:
   case Triple::bpfel:
   case Triple::msp430:
+  case Triple::scott8:
   case Triple::systemz:
   case Triple::ve:
     T.setArch(UnknownArch);
@@ -1553,6 +1565,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::m68k:
   case Triple::msp430:
   case Triple::r600:
+  case Triple::scott8:
   case Triple::shave:
   case Triple::sparcel:
   case Triple::tce:

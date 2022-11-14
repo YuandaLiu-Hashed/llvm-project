@@ -2057,6 +2057,22 @@ MCSection *TargetLoweringObjectFileCOFF::getSectionForConstant(
 }
 
 //===----------------------------------------------------------------------===//
+//                                 Scott8
+//===----------------------------------------------------------------------===//
+
+MCSection *TargetLoweringObjectFileScott8::getExplicitSectionGlobal(
+    const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
+  llvm_unreachable("getExplicitSectionGlobal not implemented");
+}
+
+MCSection *TargetLoweringObjectFileScott8::SelectSectionForGlobal(
+    const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
+  // Let's dump everything into one section regardless of Kind.
+  const MCObjectFileInfo *MOFI = getContext().getObjectFileInfo();
+  return MOFI->getTextSection();
+}
+
+//===----------------------------------------------------------------------===//
 //                                  Wasm
 //===----------------------------------------------------------------------===//
 
