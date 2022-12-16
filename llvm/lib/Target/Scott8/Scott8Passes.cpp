@@ -229,7 +229,6 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   const MachineOperand &Lhs = MI->getOperand(0);
   const MachineOperand &Rhs = MI->getOperand(2);
 
-  
   //Shift RHS to the right by one
   //if overflow
   //  LHS + TMP -> TMP
@@ -285,7 +284,9 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
       //Awaiting Completion
   auto MBB_End = MBB_B->splitAt(*jmp_Begin, true);
   BuildMI(*MBB_End, MI, DL, TII->get(Scott8::CLF));
-  
+
+  //don't need to kill Rhs register, as it will be zero anyways.
+
   //Fill in jump target and constraints.
   jz_End.addMBB(MBB_End).addImm(0b0001);
   jc_A.addMBB(MBB_A).addImm(0b1000);
@@ -296,7 +297,7 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   MBB_A->setLabelMustBeEmitted();
   MBB_B->setLabelMustBeEmitted();
   MBB_End->setLabelMustBeEmitted();
-  
+
   MI->eraseFromParent();
   return true;
 }
