@@ -13,7 +13,8 @@
 #ifndef MLIR_DIALECT_VECTOR_IR_VECTOROPS_H
 #define MLIR_DIALECT_VECTOR_IR_VECTOROPS_H
 
-#include "mlir/Dialect/Vector/Interfaces/MaskingInterfaces.h"
+#include "mlir/Dialect/Vector/Interfaces/MaskableOpInterface.h"
+#include "mlir/Dialect/Vector/Interfaces/MaskingOpInterface.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -117,7 +118,7 @@ void populateBubbleVectorBitCastOpPatterns(RewritePatternSet &patterns,
 /// VectorToSCF, which reduces the rank of vector transfer ops.
 void populateVectorTransferLoweringPatterns(
     RewritePatternSet &patterns,
-    llvm::Optional<unsigned> maxTransferRank = llvm::None,
+    llvm::Optional<unsigned> maxTransferRank = std::nullopt,
     PatternBenefit benefit = 1);
 
 /// These patterns materialize masks for various vector ops such as transfers.

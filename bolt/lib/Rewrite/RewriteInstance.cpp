@@ -30,7 +30,6 @@
 #include "bolt/RuntimeLibs/InstrumentationRuntimeLibrary.h"
 #include "bolt/Utils/CommandLineOpts.h"
 #include "bolt/Utils/Utils.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugFrame.h"
@@ -479,6 +478,11 @@ Error RewriteInstance::discoverStorage() {
   NextAvailableAddress = alignTo(NextAvailableAddress, BC->PageAlign);
   NextAvailableOffset = alignTo(NextAvailableOffset, BC->PageAlign);
 
+  // Hugify: Additional huge page from left side due to
+  // weird ASLR mapping addresses (4KB aligned)
+  if (opts::Hugify && !BC->HasFixedLoadAddress)
+    NextAvailableAddress += BC->PageAlign;
+
   if (!opts::UseGnuStack) {
     // This is where the black magic happens. Creating PHDR table in a segment
     // other than that containing ELF header is tricky. Some loaders and/or
@@ -599,10 +603,19 @@ void RewriteInstance::parsePseudoProbe() {
     errs() << "BOLT-WARNING: fail in building GUID2FuncDescMap\n";
     return;
   }
+
+  MCPseudoProbeDecoder::Uint64Set GuidFilter;
+  MCPseudoProbeDecoder::Uint64Map FuncStartAddrs;
+  for (const BinaryFunction *F : BC->getAllBinaryFunctions()) {
+    for (const MCSymbol *Sym : F->getSymbols()) {
+      FuncStartAddrs[Function::getGUID(NameResolver::restore(Sym->getName()))] =
+          F->getAddress();
+    }
+  }
   Contents = PseudoProbeSection->getContents();
   if (!BC->ProbeDecoder.buildAddress2ProbeMap(
-          reinterpret_cast<const uint8_t *>(Contents.data()),
-          Contents.size())) {
+          reinterpret_cast<const uint8_t *>(Contents.data()), Contents.size(),
+          GuidFilter, FuncStartAddrs)) {
     BC->ProbeDecoder.getAddress2ProbesMap().clear();
     errs() << "BOLT-WARNING: fail in building Address2ProbeMap\n";
     return;
@@ -665,9 +678,9 @@ void RewriteInstance::parseBuildID() {
   BuildID = Buf.slice(Offset, Offset + DescSz);
 }
 
-Optional<std::string> RewriteInstance::getPrintableBuildID() const {
+std::optional<std::string> RewriteInstance::getPrintableBuildID() const {
   if (BuildID.empty())
-    return NoneType();
+    return std::nullopt;
 
   std::string Str;
   raw_string_ostream OS(Str);
@@ -1440,7 +1453,7 @@ void RewriteInstance::adjustFunctionBoundaries() {
       NextFunction = &std::next(BFI)->second;
 
     // Check if it's a fragment of a function.
-    Optional<StringRef> FragName =
+    std::optional<StringRef> FragName =
         Function.hasRestoredNameRegex(".*\\.cold(\\.[0-9]+)?");
     if (FragName) {
       static bool PrintedWarning = false;
@@ -1669,7 +1682,7 @@ Error RewriteInstance::readSpecialSections() {
 
   // Parse build-id
   parseBuildID();
-  if (Optional<std::string> FileBuildID = getPrintableBuildID())
+  if (std::optional<std::string> FileBuildID = getPrintableBuildID())
     BC->setFileBuildID(*FileBuildID);
 
   parseSDTNotes();
@@ -2755,7 +2768,7 @@ void RewriteInstance::selectFunctionsToProcess() {
           return true;
 
       // Non-regex check (-funcs-no-regex and -funcs-file-no-regex).
-      Optional<StringRef> Match =
+      std::optional<StringRef> Match =
           Function.forEachName([&ForceFunctionsNR](StringRef Name) {
             return ForceFunctionsNR.count(Name.str());
           });
@@ -3426,6 +3439,8 @@ void RewriteInstance::encodePseudoProbes() {
   // Address of the first probe is absolute.
   // Other probes' address are represented by delta
   auto EmitDecodedPseudoProbe = [&](MCDecodedPseudoProbe *&CurProbe) {
+    assert(!isSentinelProbe(CurProbe->getAttributes()) &&
+           "Sentinel probes should not be emitted");
     EmitULEB128IntValue(CurProbe->getIndex());
     uint8_t PackedType = CurProbe->getType() | (CurProbe->getAttributes() << 4);
     uint8_t Flag =
@@ -3530,9 +3545,17 @@ void RewriteInstance::encodePseudoProbes() {
         reinterpret_cast<const uint8_t *>(DescContents.data()),
         DescContents.size());
     StringRef ProbeContents = PseudoProbeSection->getOutputContents();
+    MCPseudoProbeDecoder::Uint64Set GuidFilter;
+    MCPseudoProbeDecoder::Uint64Map FuncStartAddrs;
+    for (const BinaryFunction *F : BC->getAllBinaryFunctions()) {
+      const uint64_t Addr =
+          F->isEmitted() ? F->getOutputAddress() : F->getAddress();
+      FuncStartAddrs[Function::getGUID(
+          NameResolver::restore(F->getOneName()))] = Addr;
+    }
     DummyDecoder.buildAddress2ProbeMap(
         reinterpret_cast<const uint8_t *>(ProbeContents.data()),
-        ProbeContents.size());
+        ProbeContents.size(), GuidFilter, FuncStartAddrs);
     DummyDecoder.printProbesForAllAddresses(outs());
   }
 }
@@ -3700,6 +3723,12 @@ void RewriteInstance::mapCodeSections(RuntimeDyld &RTDyld) {
         Address = alignTo(Address, Section->getAlignment());
         Section->setOutputAddress(Address);
         Address += Section->getOutputSize();
+
+        // Hugify: Additional huge page from right side due to
+        // weird ASLR mapping addresses (4KB aligned)
+        if (opts::Hugify && !BC->HasFixedLoadAddress &&
+            Section->getName() == BC->getMainCodeSectionName())
+          Address = alignTo(Address, Section->getAlignment());
       }
 
       // Make sure we allocate enough space for huge pages.
@@ -4733,7 +4762,7 @@ void RewriteInstance::updateELFSymbolTable(
     assert(SymbolName && "cannot get symbol name");
 
     auto updateSymbolValue = [&](const StringRef Name,
-                                 Optional<uint64_t> Value = NoneType()) {
+                                 Optional<uint64_t> Value = std::nullopt) {
       NewSymbol.st_value = Value ? *Value : getNewValueForSymbol(Name);
       NewSymbol.st_shndx = ELF::SHN_ABS;
       outs() << "BOLT-INFO: setting " << Name << " to 0x"

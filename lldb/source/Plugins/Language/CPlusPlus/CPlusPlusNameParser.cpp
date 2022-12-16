@@ -16,14 +16,13 @@
 using namespace lldb;
 using namespace lldb_private;
 using llvm::Optional;
-using llvm::None;
 using ParsedFunction = lldb_private::CPlusPlusNameParser::ParsedFunction;
 using ParsedName = lldb_private::CPlusPlusNameParser::ParsedName;
 namespace tok = clang::tok;
 
 Optional<ParsedFunction> CPlusPlusNameParser::ParseAsFunctionDefinition() {
   m_next_token_index = 0;
-  Optional<ParsedFunction> result(None);
+  Optional<ParsedFunction> result(std::nullopt);
 
   // Try to parse the name as function without a return type specified e.g.
   // main(int, char*[])
@@ -44,7 +43,7 @@ Optional<ParsedFunction> CPlusPlusNameParser::ParseAsFunctionDefinition() {
   // e.g. int main(int, char*[])
   result = ParseFunctionImpl(true);
   if (HasMoreTokens())
-    return None;
+    return std::nullopt;
   return result;
 }
 
@@ -52,9 +51,9 @@ Optional<ParsedName> CPlusPlusNameParser::ParseAsFullName() {
   m_next_token_index = 0;
   Optional<ParsedNameRanges> name_ranges = ParseFullNameImpl();
   if (!name_ranges)
-    return None;
+    return std::nullopt;
   if (HasMoreTokens())
-    return None;
+    return std::nullopt;
   ParsedName result;
   result.basename = GetTextForRange(name_ranges.value().basename_range);
   result.context = GetTextForRange(name_ranges.value().context_range);
@@ -105,27 +104,32 @@ clang::Token &CPlusPlusNameParser::Peek() {
 Optional<ParsedFunction>
 CPlusPlusNameParser::ParseFunctionImpl(bool expect_return_type) {
   Bookmark start_position = SetBookmark();
+
+  ParsedFunction result;
   if (expect_return_type) {
+    size_t return_start = GetCurrentPosition();
     // Consume return type if it's expected.
     if (!ConsumeToken(tok::kw_auto) && !ConsumeTypename())
-      return None;
+      return std::nullopt;
+
+    size_t return_end = GetCurrentPosition();
+    result.return_type = GetTextForRange(Range(return_start, return_end));
   }
 
   auto maybe_name = ParseFullNameImpl();
   if (!maybe_name) {
-    return None;
+    return std::nullopt;
   }
 
   size_t argument_start = GetCurrentPosition();
   if (!ConsumeArguments()) {
-    return None;
+    return std::nullopt;
   }
 
   size_t qualifiers_start = GetCurrentPosition();
   SkipFunctionQualifiers();
   size_t end_position = GetCurrentPosition();
 
-  ParsedFunction result;
   result.name.basename = GetTextForRange(maybe_name.value().basename_range);
   result.name.context = GetTextForRange(maybe_name.value().context_range);
   result.arguments = GetTextForRange(Range(argument_start, qualifiers_start));
@@ -136,18 +140,39 @@ CPlusPlusNameParser::ParseFunctionImpl(bool expect_return_type) {
 
 Optional<ParsedFunction>
 CPlusPlusNameParser::ParseFuncPtr(bool expect_return_type) {
+  // This function parses a function definition
+  // that returns a pointer type.
+  // E.g., double (*(*func(long))(int))(float)
+
+  // Step 1:
+  // Remove the return type of the innermost
+  // function pointer type.
+  //
+  // Leaves us with:
+  //   (*(*func(long))(int))(float)
   Bookmark start_position = SetBookmark();
   if (expect_return_type) {
     // Consume return type.
     if (!ConsumeTypename())
-      return None;
+      return std::nullopt;
   }
 
+  // Step 2:
+  //
+  // Skip a pointer and parenthesis pair.
+  //
+  // Leaves us with:
+  //   (*func(long))(int))(float)
   if (!ConsumeToken(tok::l_paren))
-    return None;
+    return std::nullopt;
   if (!ConsumePtrsAndRefs())
-    return None;
+    return std::nullopt;
 
+  // Step 3:
+  //
+  // Consume inner function name. This will fail unless
+  // we stripped all the pointers on the left hand side
+  // of the funciton name.
   {
     Bookmark before_inner_function_pos = SetBookmark();
     auto maybe_inner_function_name = ParseFunctionImpl(false);
@@ -161,6 +186,24 @@ CPlusPlusNameParser::ParseFuncPtr(bool expect_return_type) {
         }
   }
 
+  // Step 4:
+  //
+  // Parse the remaining string as a function pointer again.
+  // This time don't consume the inner-most typename since
+  // we're left with pointers only. This will strip another
+  // layer of pointers until we're left with the innermost
+  // function name/argument. I.e., func(long))(int))(float)
+  //
+  // Once we successfully stripped all pointers and gotten
+  // the innermost function name from ParseFunctionImpl above,
+  // we consume a single ')' and the arguments '(...)' that follows.
+  //
+  // Leaves us with:
+  //   )(float)
+  //
+  // This is the remnant of the outer function pointers' arguments.
+  // Unwinding the recursive calls will remove the remaining
+  // arguments.
   auto maybe_inner_function_ptr_name = ParseFuncPtr(false);
   if (maybe_inner_function_ptr_name)
     if (ConsumeToken(tok::r_paren))
@@ -169,7 +212,8 @@ CPlusPlusNameParser::ParseFuncPtr(bool expect_return_type) {
         start_position.Remove();
         return maybe_inner_function_ptr_name;
       }
-  return None;
+
+  return std::nullopt;
 }
 
 bool CPlusPlusNameParser::ConsumeArguments() {
@@ -676,7 +720,7 @@ CPlusPlusNameParser::ParseFullNameImpl() {
     start_position.Remove();
     return result;
   } else {
-    return None;
+    return std::nullopt;
   }
 }
 

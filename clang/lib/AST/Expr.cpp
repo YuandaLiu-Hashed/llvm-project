@@ -214,11 +214,15 @@ bool Expr::isFlexibleArrayMemberLike(
   if (CAT) {
     llvm::APInt Size = CAT->getSize();
 
+    using FAMKind = LangOptions::StrictFlexArraysLevelKind;
+
+    if (StrictFlexArraysLevel == FAMKind::IncompleteOnly)
+      return false;
+
     // GCC extension, only allowed to represent a FAM.
     if (Size == 0)
       return true;
 
-    using FAMKind = LangOptions::StrictFlexArraysLevelKind;
     if (StrictFlexArraysLevel == FAMKind::ZeroOrIncomplete && Size.uge(1))
       return false;
 
@@ -643,7 +647,7 @@ std::string SYCLUniqueStableNameExpr::ComputeName(ASTContext &Context,
                            const NamedDecl *ND) -> llvm::Optional<unsigned> {
     if (const auto *RD = dyn_cast<CXXRecordDecl>(ND))
       return RD->getDeviceLambdaManglingNumber();
-    return llvm::None;
+    return std::nullopt;
   };
 
   std::unique_ptr<MangleContext> Ctx{ItaniumMangleContext::create(
@@ -3640,6 +3644,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case ShuffleVectorExprClass:
   case ConvertVectorExprClass:
   case AsTypeExprClass:
+  case CXXParenListInitExprClass:
     // These have a side-effect if any subexpression does.
     break;
 
@@ -4529,7 +4534,8 @@ DesignatedInitUpdateExpr::DesignatedInitUpdateExpr(const ASTContext &C,
            OK_Ordinary) {
   BaseAndUpdaterExprs[0] = baseExpr;
 
-  InitListExpr *ILE = new (C) InitListExpr(C, lBraceLoc, None, rBraceLoc);
+  InitListExpr *ILE =
+      new (C) InitListExpr(C, lBraceLoc, std::nullopt, rBraceLoc);
   ILE->setType(baseExpr->getType());
   BaseAndUpdaterExprs[1] = ILE;
 

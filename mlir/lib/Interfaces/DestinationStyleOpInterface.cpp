@@ -27,7 +27,7 @@ LogicalResult detail::verifyDestinationStyleOpInterface(Operation *op) {
       cast<DestinationStyleOpInterface>(op);
 
   SmallVector<OpOperand *> outputBufferOperands, outputTensorOperands;
-  for (OpOperand *operand : dstStyleOp.getOutputOperands()) {
+  for (OpOperand *operand : dstStyleOp.getDpsInitOperands()) {
     Type type = operand->get().getType();
     if (type.isa<MemRefType>()) {
       outputBufferOperands.push_back(operand);
@@ -41,11 +41,11 @@ LogicalResult detail::verifyDestinationStyleOpInterface(Operation *op) {
   }
 
   // Expect at least one output operand.
-  int64_t numInputs = dstStyleOp.getNumInputs();
-  int64_t numOutputs = dstStyleOp.getNumOutputs();
-  if (numOutputs == 0)
+  int64_t numInputs = dstStyleOp.getNumDpsInputs();
+  int64_t numInits = dstStyleOp.getNumDpsInits();
+  if (numInits == 0)
     return op->emitOpError("expected at least one output operand");
-  if (failed(OpTrait::impl::verifyNOperands(op, numInputs + numOutputs)))
+  if (failed(OpTrait::impl::verifyNOperands(op, numInputs + numInits)))
     return failure();
   // Verify the number of results matches the number of output tensors.
   if (op->getNumResults() != outputTensorOperands.size())
@@ -53,15 +53,6 @@ LogicalResult detail::verifyDestinationStyleOpInterface(Operation *op) {
            << op->getNumResults()
            << ") to be equal to the number of output tensors ("
            << outputTensorOperands.size() << ")";
-
-  // Simplifying assumption: either full tensor or full buffer mode.
-  // This allows simpler verification of output operands vs result types
-  // without premature tracking of which operand is what in mixed-mode.
-  // TODO: relax when mixed-mode needs to pass verification.
-  if (!outputBufferOperands.empty() && !outputTensorOperands.empty())
-    return op->emitOpError(
-        "expected output operands to all have tensor type or "
-        "all have buffer type");
 
   for (OpOperand *opOperand : outputTensorOperands) {
     OpResult result = dstStyleOp.getTiedOpResult(opOperand);

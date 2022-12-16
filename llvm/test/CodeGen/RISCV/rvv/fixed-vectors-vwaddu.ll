@@ -265,7 +265,7 @@ define <128 x i16> @vwaddu_v128i16(<128 x i8>* %x, <128 x i8>* %y) nounwind {
 ; CHECK-NEXT:    vsetvli zero, a0, e8, m4, ta, ma
 ; CHECK-NEXT:    vwaddu.vv v8, v16, v24
 ; CHECK-NEXT:    addi a0, sp, 16
-; CHECK-NEXT:    vl8re8.v v24, (a0) # Unknown-size Folded Reload
+; CHECK-NEXT:    vl8r.v v24, (a0) # Unknown-size Folded Reload
 ; CHECK-NEXT:    vwaddu.vv v16, v24, v0
 ; CHECK-NEXT:    csrr a0, vlenb
 ; CHECK-NEXT:    slli a0, a0, 3
@@ -300,7 +300,7 @@ define <64 x i32> @vwaddu_v64i32(<64 x i16>* %x, <64 x i16>* %y) nounwind {
 ; CHECK-NEXT:    vsetvli zero, a0, e16, m4, ta, ma
 ; CHECK-NEXT:    vwaddu.vv v8, v16, v24
 ; CHECK-NEXT:    addi a0, sp, 16
-; CHECK-NEXT:    vl8re8.v v24, (a0) # Unknown-size Folded Reload
+; CHECK-NEXT:    vl8r.v v24, (a0) # Unknown-size Folded Reload
 ; CHECK-NEXT:    vwaddu.vv v16, v24, v0
 ; CHECK-NEXT:    csrr a0, vlenb
 ; CHECK-NEXT:    slli a0, a0, 3
@@ -333,8 +333,7 @@ define <32 x i64> @vwaddu_v32i64(<32 x i32>* %x, <32 x i32>* %y) nounwind {
 ; CHECK-NEXT:    vslidedown.vi v0, v24, 16
 ; CHECK-NEXT:    vsetivli zero, 16, e32, m4, ta, ma
 ; CHECK-NEXT:    vwaddu.vv v8, v16, v24
-; CHECK-NEXT:    addi a0, sp, 16
-; CHECK-NEXT:    vl8re8.v v24, (a0) # Unknown-size Folded Reload
+; CHECK-NEXT:    vl8r.v v24, (a0) # Unknown-size Folded Reload
 ; CHECK-NEXT:    vwaddu.vv v16, v24, v0
 ; CHECK-NEXT:    csrr a0, vlenb
 ; CHECK-NEXT:    slli a0, a0, 3
@@ -858,4 +857,20 @@ define <2 x i64> @vwaddu_vx_v2i64_i64(<2 x i32>* %x, i64* %y) nounwind {
   %f = zext <2 x i32> %a to <2 x i64>
   %g = add <2 x i64> %e, %f
   ret <2 x i64> %g
+}
+
+define <4 x i64> @crash(<4 x i16> %x, <4 x i16> %y) {
+; CHECK-LABEL: crash:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    vsext.vf4 v10, v8
+; CHECK-NEXT:    vsetvli zero, zero, e32, m1, ta, ma
+; CHECK-NEXT:    vzext.vf2 v8, v9
+; CHECK-NEXT:    vwaddu.wv v10, v10, v8
+; CHECK-NEXT:    vmv2r.v v8, v10
+; CHECK-NEXT:    ret
+  %a = sext <4 x i16> %x to <4 x i64>
+  %b = zext <4 x i16> %y to <4 x i64>
+  %c = add <4 x i64> %a, %b
+  ret <4 x i64> %c
 }

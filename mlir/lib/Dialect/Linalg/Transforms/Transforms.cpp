@@ -22,6 +22,8 @@
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/IR/TensorTilingInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/Utils/Utils.h"
+#include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/Dialect/Utils/StructuredOpsUtils.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -60,34 +62,6 @@ mlir::linalg::LinalgTilingOptions::setTileSizes(ArrayRef<int64_t> ts) {
       Value v = b.create<arith::ConstantIndexOp>(op->getLoc(), s);
       return v;
     }));
-  };
-  return *this;
-}
-
-LinalgTilingOptions &mlir::linalg::LinalgTilingOptions::scalarizeDynamicDims() {
-  assert(!tileSizeComputationFunction && "tile sizes already set");
-  tileSizeComputationFunction = [](OpBuilder &b, Operation *op) {
-    SmallVector<Value, 4> tileSizes;
-    auto linalgOp = dyn_cast<LinalgOp>(op);
-    if (!linalgOp)
-      return tileSizes;
-    Location loc = linalgOp.getLoc();
-    SmallVector<OpFoldResult> allShapeSizes =
-        linalgOp.createFlatListOfOperandDims(b, loc);
-    AffineMap map = linalgOp.getShapesToLoopsMap();
-    if (!map)
-      return tileSizes;
-    IRRewriter rewriter(b);
-    SmallVector<OpFoldResult> shapeSizes =
-        makeComposedFoldedMultiResultAffineApply(rewriter, loc, map,
-                                                 allShapeSizes);
-    // If the shape size is dynamic, tile by 1. Otherwise, do not tile (tile
-    // size 0).
-    for (OpFoldResult shapeSize : shapeSizes)
-      tileSizes.push_back(getConstantIntValue(shapeSize)
-                              ? b.create<arith::ConstantIndexOp>(loc, 0)
-                              : b.create<arith::ConstantIndexOp>(loc, 1));
-    return tileSizes;
   };
   return *this;
 }
@@ -138,7 +112,7 @@ static FailureOr<Value> padOperandToSmallestStaticBoundingBox(
   OpOperand *currOpOperand = opOperand;
   while (auto linalgOp = currOpOperand->get().getDefiningOp<LinalgOp>()) {
     OpResult result = currOpOperand->get().cast<OpResult>();
-    currOpOperand = linalgOp.getOutputOperand(result.getResultNumber());
+    currOpOperand = linalgOp.getDpsInitOperand(result.getResultNumber());
   }
 
   // Fail if `currOpOperand` is not defined by an ExtractSliceOp.
@@ -222,8 +196,8 @@ linalg::rewriteAsPaddedOp(OpBuilder &b, LinalgOp opToPad,
 
   // Clone `opToPad` to operate on the statically padded shapes.
   auto resultTensorTypes =
-      ValueRange(newOperands).take_back(opToPad.getNumOutputs()).getTypes();
-  paddedOp = opToPad.clone(b, loc, resultTensorTypes, newOperands);
+      ValueRange(newOperands).take_back(opToPad.getNumDpsInits()).getTypes();
+  paddedOp = clone(b, opToPad, resultTensorTypes, newOperands);
 
   // Recover the slice out of the new static results. This keeps the original
   // linalg op around because it uses the dims of the original results.
@@ -246,7 +220,8 @@ linalg::rewriteAsPaddedOp(OpBuilder &b, LinalgOp opToPad,
 
 /// Try to peel a loop `op` and return the new result.
 // TODO: Add support for scf.parallel and affine.for loops.
-static SmallVector<Value, 4> peelLoop(RewriterBase &rewriter, Operation *op) {
+SmallVector<Value> mlir::linalg::peelLoop(RewriterBase &rewriter,
+                                          Operation *op) {
   return llvm::TypeSwitch<Operation *, SmallVector<Value, 4>>(op)
       .Case<scf::ForOp>([&](scf::ForOp forOp) {
         scf::ForOp partialIteration;
@@ -262,47 +237,8 @@ static SmallVector<Value, 4> peelLoop(RewriterBase &rewriter, Operation *op) {
 /// Peel and canonicalize 'loops'.
 void mlir::linalg::peelLoops(RewriterBase &rewriter,
                              ArrayRef<scf::ForOp> loops) {
-  for (auto loopOp : loops) {
-    SmallVector<Value, 4> loopResults;
-    loopResults = peelLoop(rewriter, loopOp);
-  }
-}
-
-/// Peel loops after tiling.
-void mlir::linalg::peelTiledLinalgOp(RewriterBase &rewriter, TiledLinalgOp &res,
-                                     ArrayRef<int64_t> peeledLoops,
-                                     LinalgTilingLoopType loopType) {
-  for (int64_t loop : peeledLoops) {
-    assert(loop < static_cast<int64_t>(res.loops.size()) &&
-           "requested peeling of non-existing loop");
-    SmallVector<Value, 4> loopResults;
-    Operation *loopOp = res.loops[loop];
-    loopResults = peelLoop(rewriter, loopOp);
-
-    // The result of the loop nest may change with peeling.
-    if (res.tensorResults.size() == loopOp->getNumResults() &&
-        std::equal(res.tensorResults.begin(), res.tensorResults.end(),
-                   loopOp->getResults().begin()))
-      res.tensorResults = loopResults;
-  }
-}
-
-FailureOr<TiledLinalgOp>
-mlir::linalg::tileWithLinalgTilingOptions(RewriterBase &rewriter, LinalgOp op,
-                                          const LinalgTilingOptions &options) {
-  FailureOr<TiledLinalgOp> res = tileLinalgOp(rewriter, op, options);
-  if (failed(res))
-    return failure();
-
-  // Peel the loops of the TiledLinalgOp.
-  peelTiledLinalgOp(rewriter, *res, options.peeledLoops, options.loopType);
-
-  if (res->tensorResults.empty())
-    rewriter.eraseOp(op);
-  else
-    rewriter.replaceOp(op, res->tensorResults);
-
-  return res;
+  for (auto loopOp : loops)
+    peelLoop(rewriter, loopOp);
 }
 
 /// Linalg padding pattern.
@@ -363,8 +299,10 @@ LogicalResult mlir::linalg::CopyVectorizationPattern::matchAndRewrite(
   return vectorizeCopy(rewriter, copyOp);
 }
 
-static SmallVector<StringRef> getNParallelLoopsAttrs(unsigned nParallelLoops) {
-  return SmallVector<StringRef>(nParallelLoops, getParallelIteratorTypeName());
+static SmallVector<utils::IteratorType>
+getNParallelLoopsAttrs(unsigned nParallelLoops) {
+  return SmallVector<utils::IteratorType>(nParallelLoops,
+                                          utils::IteratorType::parallel);
 }
 
 /// Rewrite a tensor::PadOp into a sequence of EmptyOp, FillOp (to
@@ -412,7 +350,7 @@ PadOpTransformationPattern::matchAndRewrite(tensor::PadOp padOp,
   SmallVector<AffineExpr, 4> outputExprs;
   for (unsigned i = 0; i < resultShapedType.getRank(); ++i) {
     outputExprs.push_back(getAffineDimExpr(i, rewriter.getContext()) +
-                          padOp.getStaticLow()[i].cast<IntegerAttr>().getInt());
+                          padOp.getStaticLow()[i]);
   }
 
   SmallVector<AffineMap, 2> transferMaps = {
@@ -534,6 +472,118 @@ LogicalResult ExtractSliceOfPadTensorSwapPattern::matchAndRewrite(
   // All shapes are static and the data source is actually used. Rewrite into
   // pad(extract_slice(x)).
   rewriter.replaceOp(sliceOp, tiledPadOp->getResults());
+  return success();
+}
+
+/// Returns a tensor.pad op if padding value is set. Otherwise, returns the
+/// source directly. The method assumes that the `packOp` has static shapes.
+static Value getPackOpSourceOrPaddedSource(OpBuilder &builder,
+                                           tensor::PackOp packOp) {
+  Value input = packOp.getSource();
+  if (!packOp.getPaddingValue()) {
+    return input;
+  }
+
+  Location loc = packOp.getLoc();
+  ShapedType inputType = packOp.getSourceType();
+  int64_t inputRank = inputType.getRank();
+  assert(llvm::all_of(packOp.getDestType().getShape().take_front(inputRank),
+                      [](int64_t val) { return val == 1; }));
+
+  SmallVector<int64_t> paddedShape;
+  DenseMap<int64_t, OpFoldResult> tileAndPosMapping =
+      packOp.getDimAndTileMapping();
+  for (int64_t dim = 0; dim < inputRank; ++dim) {
+    int64_t size = inputType.getDimSize(dim);
+    if (!tileAndPosMapping.count(dim)) {
+      paddedShape.push_back(size);
+      continue;
+    }
+
+    // The size is less than or equal to tileSize because outer dims are all 1s.
+    Optional<int64_t> tileSize =
+        getConstantIntValue(tileAndPosMapping.lookup(dim));
+    assert(tileSize.has_value() && "dynamic inner tile size is not supported");
+    paddedShape.push_back(tileSize.value());
+  }
+  auto resultType =
+      RankedTensorType::get(paddedShape, inputType.getElementType());
+  return tensor::createPadHighOp(resultType, input, packOp.getPaddingValue(),
+                                 /*nofold=*/false, loc, builder);
+}
+
+LogicalResult GeneralizeOuterUnitDimsPackOpPattern::matchAndRewrite(
+    tensor::PackOp packOp, PatternRewriter &rewriter) const {
+  // TODO: support the case that outer dimensions are not all 1s A
+  // tensor.expand_shape will be generated in this case.
+  int64_t srcRank = packOp.getSourceRank();
+  if (llvm::any_of(packOp.getDestType().getShape().take_front(srcRank),
+                   [](int64_t val) { return val != 1; })) {
+    return rewriter.notifyMatchFailure(
+        packOp, "require the outer dimension of the result are all 1s");
+  }
+
+  if (llvm::any_of(packOp.getMixedTiles(),
+                   [](OpFoldResult tile) { return tile.is<Value>(); })) {
+    return rewriter.notifyMatchFailure(packOp,
+                                       "require inner tile sizes being static");
+  }
+
+  // 1. Use rank-reduced tensor.extract_slice op to extract the tile.
+  Location loc = packOp.getLoc();
+  Attribute zeroIdxAttr = rewriter.getIndexAttr(0);
+  Attribute oneIdxAttr = rewriter.getIndexAttr(1);
+  SmallVector<OpFoldResult> readOffsets(srcRank, zeroIdxAttr);
+  SmallVector<OpFoldResult> readStrides(srcRank, oneIdxAttr);
+  SmallVector<OpFoldResult> readSizes;
+  SmallVector<int64_t> readShape;
+  DenseMap<int64_t, OpFoldResult> dimAndTileMapping =
+      packOp.getDimAndTileMapping();
+  for (auto i : llvm::seq<unsigned>(0, srcRank)) {
+    if (!dimAndTileMapping.count(i)) {
+      readSizes.push_back(oneIdxAttr);
+      continue;
+    }
+    readSizes.push_back(dimAndTileMapping[i]);
+    readShape.push_back(getConstantIntValue(dimAndTileMapping[i])
+                            .value_or(ShapedType::kDynamic));
+  }
+  Type elemType = packOp.getSourceType().getElementType();
+  auto readType = RankedTensorType::get(readShape, elemType);
+
+  Value input = getPackOpSourceOrPaddedSource(rewriter, packOp);
+  Value tile = rewriter.create<tensor::ExtractSliceOp>(
+      loc, readType, input, readOffsets, readSizes, readStrides);
+
+  // 2. Transpose the tile to match the inner tile order.
+  constexpr int64_t kNonTiledMarker = -1;
+  ArrayRef<int64_t> innerDimsPos = packOp.getInnerDimsPos();
+  SmallVector<int64_t> vec(srcRank, kNonTiledMarker);
+  for (auto [index, value] : llvm::enumerate(innerDimsPos))
+    vec[value] = index;
+  SmallVector<int64_t> perm = llvm::to_vector(llvm::make_filter_range(
+      vec, [&](int64_t v) { return v != kNonTiledMarker; }));
+
+  SmallVector<int64_t> transpShape = readShape;
+  applyPermutationToVector<int64_t>(transpShape, perm);
+
+  Value empty = rewriter.create<tensor::EmptyOp>(loc, transpShape, elemType);
+  auto transposedOp =
+      rewriter.create<linalg::TransposeOp>(loc, tile, empty, perm);
+
+  // 3. Insert the inner tile to the destination.
+  int64_t destRank = packOp.getDestRank();
+  SmallVector<OpFoldResult> writeStrides(destRank, oneIdxAttr);
+  SmallVector<OpFoldResult> writeOffsets(destRank, zeroIdxAttr);
+  SmallVector<OpFoldResult> writeSizes(srcRank, oneIdxAttr);
+  for (auto size : transpShape)
+    writeSizes.push_back(rewriter.getIndexAttr(size));
+
+  auto insert = rewriter.create<tensor::InsertSliceOp>(
+      loc, transposedOp.getResult()[0], packOp.getDest(), writeOffsets,
+      writeSizes, writeStrides);
+  rewriter.replaceOp(packOp, insert.getResult());
+
   return success();
 }
 

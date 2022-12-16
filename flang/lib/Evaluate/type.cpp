@@ -209,7 +209,11 @@ const semantics::DerivedTypeSpec *GetDerivedTypeSpec(const DynamicType &type) {
 static const semantics::Symbol *FindParentComponent(
     const semantics::DerivedTypeSpec &derived) {
   const semantics::Symbol &typeSymbol{derived.typeSymbol()};
-  if (const semantics::Scope * scope{typeSymbol.scope()}) {
+  const semantics::Scope *scope{derived.scope()};
+  if (!scope) {
+    scope = typeSymbol.scope();
+  }
+  if (scope) {
     const auto &dtDetails{typeSymbol.get<semantics::DerivedTypeDetails>()};
     if (auto extends{dtDetails.GetParentComponentName()}) {
       if (auto iter{scope->find(*extends)}; iter != scope->cend()) {
@@ -318,13 +322,18 @@ static bool AreCompatibleDerivedTypes(const semantics::DerivedTypeSpec *x,
 }
 
 static bool AreCompatibleTypes(const DynamicType &x, const DynamicType &y,
-    bool ignoreTypeParameterValues) {
+    bool ignoreTypeParameterValues, bool ignoreLengths) {
   if (x.IsUnlimitedPolymorphic()) {
     return true;
   } else if (y.IsUnlimitedPolymorphic()) {
     return false;
   } else if (x.category() != y.category()) {
     return false;
+  } else if (x.category() == TypeCategory::Character) {
+    const auto xLen{x.knownLength()};
+    const auto yLen{y.knownLength()};
+    return x.kind() == y.kind() &&
+        (ignoreLengths || !xLen || !yLen || *xLen == *yLen);
   } else if (x.category() != TypeCategory::Derived) {
     return x.kind() == y.kind();
   } else {
@@ -338,17 +347,22 @@ static bool AreCompatibleTypes(const DynamicType &x, const DynamicType &y,
 
 // See 7.3.2.3 (5) & 15.5.2.4
 bool DynamicType::IsTkCompatibleWith(const DynamicType &that) const {
-  return AreCompatibleTypes(*this, that, false);
+  return AreCompatibleTypes(*this, that, false, true);
+}
+
+bool DynamicType::IsTkLenCompatibleWith(const DynamicType &that) const {
+  return AreCompatibleTypes(*this, that, false, false);
 }
 
 // 16.9.165
 std::optional<bool> DynamicType::SameTypeAs(const DynamicType &that) const {
-  bool x{AreCompatibleTypes(*this, that, true)};
-  bool y{AreCompatibleTypes(that, *this, true)};
-  if (x == y) {
-    return x;
+  bool x{AreCompatibleTypes(*this, that, true, true)};
+  bool y{AreCompatibleTypes(that, *this, true, true)};
+  if (!x && !y) {
+    return false;
+  } else if (x && y && !IsPolymorphic() && !that.IsPolymorphic()) {
+    return true;
   } else {
-    // If either is unlimited polymorphic, the result is unknown.
     return std::nullopt;
   }
 }

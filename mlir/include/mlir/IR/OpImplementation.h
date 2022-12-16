@@ -181,7 +181,7 @@ public:
   virtual void printSymbolName(StringRef symbolRef);
 
   /// Print a handle to the given dialect resource.
-  void printResourceHandle(const AsmDialectResourceHandle &resource);
+  virtual void printResourceHandle(const AsmDialectResourceHandle &resource);
 
   /// Print an optional arrow followed by a type list.
   template <typename TypeRange>
@@ -576,6 +576,9 @@ public:
 
   /// Parse a quoted string token if present.
   virtual ParseResult parseOptionalString(std::string *string) = 0;
+
+  /// Parses a Base64 encoded string of bytes.
+  virtual ParseResult parseBase64Bytes(std::vector<char> *bytes) = 0;
 
   /// Parse a `(` token.
   virtual ParseResult parseLParen() = 0;
@@ -1010,20 +1013,38 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Parse an @-identifier and store it (without the '@' symbol) in a string
-  /// attribute named 'attrName'.
-  ParseResult parseSymbolName(StringAttr &result, StringRef attrName,
-                              NamedAttrList &attrs) {
-    if (failed(parseOptionalSymbolName(result, attrName, attrs)))
+  /// attribute.
+  ParseResult parseSymbolName(StringAttr &result) {
+    if (failed(parseOptionalSymbolName(result)))
       return emitError(getCurrentLocation())
              << "expected valid '@'-identifier for symbol name";
     return success();
   }
 
+  /// Parse an @-identifier and store it (without the '@' symbol) in a string
+  /// attribute named 'attrName'.
+  ParseResult parseSymbolName(StringAttr &result, StringRef attrName,
+                              NamedAttrList &attrs) {
+    if (parseSymbolName(result))
+      return failure();
+    attrs.append(attrName, result);
+    return success();
+  }
+
+  /// Parse an optional @-identifier and store it (without the '@' symbol) in a
+  /// string attribute.
+  virtual ParseResult parseOptionalSymbolName(StringAttr &result) = 0;
+
   /// Parse an optional @-identifier and store it (without the '@' symbol) in a
   /// string attribute named 'attrName'.
-  virtual ParseResult parseOptionalSymbolName(StringAttr &result,
-                                              StringRef attrName,
-                                              NamedAttrList &attrs) = 0;
+  ParseResult parseOptionalSymbolName(StringAttr &result, StringRef attrName,
+                                      NamedAttrList &attrs) {
+    if (succeeded(parseOptionalSymbolName(result))) {
+      attrs.append(attrName, result);
+      return success();
+    }
+    return failure();
+  }
 
   //===--------------------------------------------------------------------===//
   // Resource Parsing
@@ -1313,12 +1334,12 @@ public:
   /// skip parsing that component.
   virtual ParseResult parseGenericOperationAfterOpName(
       OperationState &result,
-      Optional<ArrayRef<UnresolvedOperand>> parsedOperandType = llvm::None,
-      Optional<ArrayRef<Block *>> parsedSuccessors = llvm::None,
+      Optional<ArrayRef<UnresolvedOperand>> parsedOperandType = std::nullopt,
+      Optional<ArrayRef<Block *>> parsedSuccessors = std::nullopt,
       Optional<MutableArrayRef<std::unique_ptr<Region>>> parsedRegions =
-          llvm::None,
-      Optional<ArrayRef<NamedAttribute>> parsedAttributes = llvm::None,
-      Optional<FunctionType> parsedFnType = llvm::None) = 0;
+          std::nullopt,
+      Optional<ArrayRef<NamedAttribute>> parsedAttributes = std::nullopt,
+      Optional<FunctionType> parsedFnType = std::nullopt) = 0;
 
   /// Parse a single SSA value operand name along with a result number if
   /// `allowResultNumber` is true.

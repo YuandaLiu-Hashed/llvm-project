@@ -348,6 +348,8 @@ public:
 
   bool SetTabSize(uint32_t tab_size);
 
+  lldb::DWIMPrintVerbosity GetDWIMPrintVerbosity() const;
+
   bool GetEscapeNonPrintables() const;
 
   bool GetNotifyVoid() const;
@@ -400,7 +402,7 @@ public:
   ///   ensure the given warning is only broadcast once.
   static void
   ReportWarning(std::string message,
-                llvm::Optional<lldb::user_id_t> debugger_id = llvm::None,
+                llvm::Optional<lldb::user_id_t> debugger_id = std::nullopt,
                 std::once_flag *once = nullptr);
 
   /// Report error events.
@@ -422,8 +424,28 @@ public:
   ///   ensure the given error is only broadcast once.
   static void
   ReportError(std::string message,
-              llvm::Optional<lldb::user_id_t> debugger_id = llvm::None,
+              llvm::Optional<lldb::user_id_t> debugger_id = std::nullopt,
               std::once_flag *once = nullptr);
+
+  /// Report info events.
+  ///
+  /// Unlike warning and error events, info events are not broadcast but are
+  /// logged for diagnostic purposes.
+  ///
+  /// \param[in] message
+  ///   The info message to be reported.
+  ///
+  /// \param [in] debugger_id
+  ///   If this optional parameter has a value, it indicates this diagnostic is
+  ///   associated with a unique debugger instance.
+  ///
+  /// \param [in] once
+  ///   If a pointer is passed to a std::once_flag, then it will be used to
+  ///   ensure the given info is only logged once.
+  static void
+  ReportInfo(std::string message,
+             llvm::Optional<lldb::user_id_t> debugger_id = std::nullopt,
+             std::once_flag *once = nullptr);
 
   static void ReportSymbolChange(const ModuleSpec &module_spec);
 
