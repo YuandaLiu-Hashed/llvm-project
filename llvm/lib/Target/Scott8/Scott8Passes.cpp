@@ -217,12 +217,6 @@ bool ExpandPostRAPsudoPass::expandSub(MachineInstr *MI, const Scott8InstrInfo *T
         .addUse(Subtrahend.getReg(), RegState::Kill);
   }
 
-  // MachineBasicBlock *NMBB = MBB->splitAt(*MI, true);
-  // NMBB->setLabelMustBeEmitted();
-
-  // BuildMI(*NMBB, NMBB->begin(), DL, TII->get(Scott8::JMP))
-  //   .addMBB(NMBB);
-
   MI->eraseFromParent();
 
   return false;
