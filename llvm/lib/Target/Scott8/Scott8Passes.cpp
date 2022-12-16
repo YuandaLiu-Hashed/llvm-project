@@ -265,6 +265,7 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
       .addUse(Rhs.getReg(), RegState::Kill);
   auto jz_End = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
       //Awaiting Completion
+      //we can only complete a jump instruction after the MBB it's jumping to is created.
   auto jc_A = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
       //Awaiting Completion
   BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::CLF));
