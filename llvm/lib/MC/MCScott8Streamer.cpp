@@ -56,12 +56,12 @@ bool MCScott8Streamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) 
   return true;
 }
 
-void MCScott8Streamer::emitCommonSymbol(MCSymbol *S, uint64_t Size, unsigned ByteAlignment) {
+void MCScott8Streamer::emitCommonSymbol(MCSymbol *S, uint64_t Size, Align ByteAlignment) {
   llvm_unreachable("Not implemented.");
 }
 
 void MCScott8Streamer::emitZerofill(MCSection *Section, MCSymbol *Symbol,
-                                  uint64_t Size, unsigned ByteAlignment,
+                                  uint64_t Size, Align ByteAlignment,
                                   SMLoc Loc) {
   llvm_unreachable("Not implemented.");
 }

@@ -108,7 +108,7 @@ void Scott8RegisterInfo::eliminateFrameIndexInLoad(MachineBasicBlock::iterator I
   MI.getOperand(FIOperandNum).ChangeToRegister(RegisterToLoad, false, false, true);
 }
 
-void Scott8RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
+bool Scott8RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                           int SPAdj, unsigned FIOperandNum,
                                           RegScavenger *RS) const {
   assert(SPAdj == 0 && "Unexpected non-zero SPAdj value");
@@ -127,12 +127,15 @@ void Scott8RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   switch (MI.getOpcode()) {
     case Scott8::NO_CLF_ADDrr:
       eliminateFrameIndexInAdd(II, FIOperandNum, Offset);
+      return true;
     break;
     case Scott8::ST:
       eliminateFrameIndexInStore(II, FIOperandNum, Offset);
+      return true;
     break;
     case Scott8::LD:
       eliminateFrameIndexInLoad(II, FIOperandNum, Offset);
+      return true;
     break;
   }
 }

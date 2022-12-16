@@ -26,8 +26,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeScott8Target() {
 
 Scott8TargetMachine::Scott8TargetMachine(
     const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
-    const TargetOptions &Options, Optional<Reloc::Model> RM,
-    Optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
+    const TargetOptions &Options, std::optional<Reloc::Model> RM,
+    std::optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
     : LLVMTargetMachine(T, "e-p:8:8:8-i8:8:8-n8-a:0:8", TT, CPU, FS, Options,
                         Reloc::Static, CodeModel::Small, OL),
       TLOF(std::make_unique<Scott8TargetObjectFile>()),

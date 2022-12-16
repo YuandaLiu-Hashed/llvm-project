@@ -26,8 +26,10 @@ namespace {
 class Scott8DAGToDAGISel : public SelectionDAGISel {
 
 public:
+  static char ID;
+
   explicit Scott8DAGToDAGISel(Scott8TargetMachine &TM)
-      : SelectionDAGISel(TM) {}
+      : SelectionDAGISel(ID, TM) {}
 
   StringRef getPassName() const override {
     return "Scott8 DAG->DAG Pattern Instruction Selection";
@@ -41,6 +43,8 @@ public:
   #include "Scott8GenDAGISel.inc"
 };
 } // end anonymous namespace
+
+char Scott8DAGToDAGISel::ID = 0;
 
 void Scott8DAGToDAGISel::Select(SDNode *Node) {
   // If we have a custom node, we have already selected
