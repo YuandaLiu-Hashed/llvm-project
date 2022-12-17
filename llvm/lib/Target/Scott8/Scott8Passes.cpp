@@ -226,8 +226,8 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   MachineBasicBlock *MBB = MI->getParent();
   DebugLoc DL;
 
-  const MachineOperand &Lhs = MI->getOperand(0);
-  const MachineOperand &Rhs = MI->getOperand(2);
+  const MachineOperand &Lhs = MI->getOperand(2);
+  const MachineOperand &Rhs = MI->getOperand(0);
 
   //Shift RHS to the right by one
   //if overflow
@@ -238,13 +238,14 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   //if not
   // go to begin
 
+  //  XOR TMP, TMP
   //Begin:
   //  SHR Rhs, Rhs
-  //  JZ @END
   //  JC @A
-  //  CLF
+  //  JZ @END
   //  JMP @B
   //A:
+  //  CLF
   //  ADD LHS, TMP
   //B:
   //  SHL Lhs, Lhs
@@ -256,22 +257,23 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   //Start STATE: LHS (input 1) | RHS (input 2) | TMP (output)
   //END STATE: LHS (unknown) | RHS (input 2) | TMP (output)
 
-  auto clrTmp = BuildMI(*MBB, MI, DL, TII->get(Scott8::NOTrr))
+  auto clrTmp = BuildMI(*MBB, MI, DL, TII->get(Scott8::XORrr))
       .addDef(Scott8::TmpReg)
+      .addUse(Scott8::TmpReg, RegState::Kill)
       .addUse(Scott8::TmpReg, RegState::Kill);
   auto MBB_Begin = MBB->splitAt(*clrTmp, true);
   BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::SHR))
       .addDef(Rhs.getReg())
       .addUse(Rhs.getReg(), RegState::Kill);
-  auto jz_End = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
-      //Awaiting Completion
-      //we can only complete a jump instruction after the MBB it's jumping to is created.
   auto jc_A = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
       //Awaiting Completion
-  BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::CLF));
+      //we can only complete a jump instruction after the MBB it's jumping to is created.
+  auto jz_End = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
+      //Awaiting Completion
   auto jmp_B = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JMP));
       //Awaiting Completion
   auto MBB_A = MBB_Begin->splitAt(*jmp_B, true);
+  BuildMI(*MBB_A, MI, DL, TII->get(Scott8::CLF));
   auto add1 = BuildMI(*MBB_A, MI, DL, TII->get(Scott8::ADDrr))
       .addDef(Scott8::TmpReg)
       .addUse(Scott8::TmpReg, RegState::Kill)
@@ -285,6 +287,11 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
       //Awaiting Completion
   auto MBB_End = MBB_B->splitAt(*jmp_Begin, true);
   BuildMI(*MBB_End, MI, DL, TII->get(Scott8::CLF));
+  
+  BuildMI(*MBB_End, MI, DL, TII->get(Scott8::ORrr))
+      .addDef(Rhs.getReg())
+      .addUse(Rhs.getReg(), RegState::Kill)
+      .addUse(Scott8::TmpReg, RegState::Kill);
 
   //don't need to kill Rhs register, as it will be zero anyways.
 
