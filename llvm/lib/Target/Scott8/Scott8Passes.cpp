@@ -166,21 +166,18 @@ bool ExpandPostRAPsudoPass::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock::iterator MBBI = MBB.begin();
     while (MBBI != MBB.end()) {
       MachineBasicBlock::iterator cMBBI = MBBI++;
-      if (cMBBI->getOpcode() == Scott8::SUB_PSEUDO) {
-        Expanded = true;
-        auto r = expandSub(cMBBI.operator->(), TII);
-        if (r) {
-          MFI = MF.begin();
+      bool expanded = false;
+      switch (cMBBI->getOpcode()) {
+        case Scott8::SUB_PSEUDO:
+          expanded = expandSub(cMBBI.operator->(), TII);
           break;
-        };
+        case Scott8::UMUL_PSEUDO:
+          expanded = expandUMul(cMBBI.operator->(), TII);
+          break;
       }
-      if (cMBBI->getOpcode() == Scott8::UMUL_PSEUDO) {
-        Expanded = true;
-        auto r = expandUMul(cMBBI.operator->(), TII);
-        if (r) {
-          MFI = MF.begin();
-          break;
-        };
+      if (expanded) {
+        MFI = MF.begin();
+        break;
       }
     }
   }
