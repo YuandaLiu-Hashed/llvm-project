@@ -11,7 +11,7 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-//                           Bundle Cmp Jcc Pass
+// Bundle Cmp Jcc Pass
 //===----------------------------------------------------------------------===//
 class BundleCmpJccPass : public MachineFunctionPass {
 public:
@@ -55,7 +55,7 @@ bool BundleCmpJccPass::runOnMachineFunction(MachineFunction &MF) {
 char BundleCmpJccPass::ID = 0;
 
 //===----------------------------------------------------------------------===//
-//                             Insert CLF Pass
+// Insert CLF Pass
 //===----------------------------------------------------------------------===//
 class InsertClfPass : public MachineFunctionPass {
 public:
@@ -101,7 +101,7 @@ char InsertClfPass::ID = 0;
 
 
 //===----------------------------------------------------------------------===//
-//                         Insert Initial Stack State Pass
+// Insert Initial Stack State Pass
 //===----------------------------------------------------------------------===//
 //Insert value 0xFF onto the stack at the first instruction of program execution.
 
@@ -133,7 +133,7 @@ bool InsertInitialStackStatePass::runOnMachineFunction(MachineFunction &MF) {
 char InsertInitialStackStatePass::ID = 0;
 
 //===----------------------------------------------------------------------===//
-//                              Expand PostRA Psudo 
+// Expand PostRA Psudo 
 //===----------------------------------------------------------------------===//
 
 class ExpandPostRAPsudoPass : public MachineFunctionPass {
@@ -187,6 +187,7 @@ bool ExpandPostRAPsudoPass::runOnMachineFunction(MachineFunction &MF) {
   return Expanded;
 }
 
+// Expand SUB
 bool ExpandPostRAPsudoPass::expandSub(MachineInstr *MI, const Scott8InstrInfo *TII) {
   MachineBasicBlock *MBB = MI->getParent();
   DebugLoc DL;
@@ -222,6 +223,7 @@ bool ExpandPostRAPsudoPass::expandSub(MachineInstr *MI, const Scott8InstrInfo *T
   return false;
 }
 
+// Expand UMUL
 bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *TII) {
   MachineBasicBlock *MBB = MI->getParent();
   DebugLoc DL;
