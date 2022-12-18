@@ -268,6 +268,34 @@ let Constraints = "$sourceReg2 = $destReg", Defs = [FR] in {
 }
 
 //===----------------------------------------------------------------------===//
+// Logical Shift Psudos
+//===----------------------------------------------------------------------===//
+
+let Defs = [FR] in {
+  def SHLri_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg, Immediate8:$amount),
+                       "# SHLri # shift $sourceReg by $amount to the left.", 
+                       [(set GPRegs:$destReg, (shl GPRegs:$sourceReg, imm:$amount)), (implicit FR)]> {
+  }
+
+  def SHRri_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg, Immediate8:$amount),
+                       "# SHRri # shift $sourceReg by $amount to the right.", 
+                       [(set GPRegs:$destReg, (srl GPRegs:$sourceReg, imm:$amount)), (implicit FR)]> {
+  }
+}
+
+let Constraints = "$sourceReg2 = $destReg", Defs = [FR] in {
+  def SHLrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
+                       "# SHLrr # shift $destReg by $sourceReg amount to the left.", 
+                       [(set GPRegs:$destReg, (shl GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
+  }
+
+  def SHRrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
+                       "# SHRrr # shift $destReg by $sourceReg amount to the right.", 
+                       [(set GPRegs:$destReg, (srl GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // I/O Instructions
 //===----------------------------------------------------------------------===//
 

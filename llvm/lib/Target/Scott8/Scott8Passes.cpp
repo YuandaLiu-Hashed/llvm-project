@@ -147,6 +147,10 @@ public:
   bool expandSub(MachineInstr *MI, const Scott8InstrInfo *TII);
   bool expandUMul(MachineInstr *MI, const Scott8InstrInfo *TII);
 
+  bool expandShiftRI(MachineInstr *MI, const Scott8InstrInfo *TII, bool isLeft);
+
+  bool expandShiftRR(MachineInstr *MI, const Scott8InstrInfo *TII, bool isLeft);
+
 private:
   static char ID;
 };
@@ -173,6 +177,19 @@ bool ExpandPostRAPsudoPass::runOnMachineFunction(MachineFunction &MF) {
           break;
         case Scott8::UMUL_PSEUDO:
           expanded = expandUMul(cMBBI.operator->(), TII);
+          break;
+
+        case Scott8::SHLri_PSEUDO:
+          expanded = expandShiftRI(cMBBI.operator->(), TII, /* isLeft */ true);
+          break;
+        case Scott8::SHRri_PSEUDO:
+          expanded = expandShiftRI(cMBBI.operator->(), TII, /* isLeft */false);
+          break;
+        case Scott8::SHLrr_PSEUDO:
+          expanded = expandShiftRR(cMBBI.operator->(), TII, /* isLeft */true);
+          break;
+        case Scott8::SHRrr_PSEUDO:
+          expanded = expandShiftRR(cMBBI.operator->(), TII, /* isLeft */false);
           break;
       }
       if (expanded) {
@@ -306,6 +323,94 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   MBB_End->setLabelMustBeEmitted();
 
   MI->eraseFromParent();
+  return true;
+}
+
+// Expand Shift RI
+bool ExpandPostRAPsudoPass::expandShiftRI(MachineInstr *MI, const Scott8InstrInfo *TII, bool isLeft) {
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc DL;
+
+  const Register SourceReg = MI->getOperand(1).getReg();
+  const int Amount = MI->getOperand(2).getImm();
+  const Register DestReg = MI->getOperand(0).getReg();
+
+  //if shift more than 8, just set to zero.
+  //This should be guarded before anyway.
+  if (Amount >= 8) {
+    BuildMI(*MBB, MI, DL, TII->get(Scott8::XORrr))
+        .addDef(DestReg)
+        .addUse(DestReg, RegState::Kill)
+        .addUse(SourceReg, RegState::Kill);
+    BuildMI(*MBB, MI, DL, TII->get(Scott8::CLF));
+    MI->eraseFromParent();
+    return true;
+  }
+  //Insert shifts
+  //The first shift also serve as copy
+  for (int i = 0; i < Amount; i++) {
+    BuildMI(*MBB, MI, DL, TII->get(isLeft ? Scott8::SHL : Scott8::SHR))
+        .addDef(DestReg)
+        .addUse(i == 0 ? SourceReg : DestReg, RegState::Kill);
+    BuildMI(*MBB, MI, DL, TII->get(Scott8::CLF));
+  }
+  MI->eraseFromParent();
+  return true;
+}
+
+// Expand ShiftRR
+bool ExpandPostRAPsudoPass::expandShiftRR(MachineInstr *MI, const Scott8InstrInfo *TII, bool isLeft) {
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc DL;
+
+  const int AmountReg = MI->getOperand(2).getReg();
+  const Register DestReg = MI->getOperand(0).getReg();
+
+  //  DATA Tmp, -1
+  //Begin:
+  //  OR AmountReg, AmountReg
+  //  JZ @End
+  //  ADD Tmp, AmountReg
+  //  CLF
+  //  Shift DestReg, DestReg
+  //  JZ @End
+  //  JMP Begin
+  //End:
+  //  CLF
+
+  auto loadNeg1 = BuildMI(*MBB, MI, DL, TII->get(Scott8::CPYri))
+      .addReg(Scott8::TmpReg)
+      .addImm(0xFF); //this is -1
+  auto MBB_Begin = MBB->splitAt(*loadNeg1, true);
+  BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::ORrr))
+      .addDef(AmountReg)
+      .addUse(AmountReg, RegState::Kill)
+      .addUse(AmountReg, RegState::Kill);
+  auto jz_End = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
+      //completed later
+  BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::ADDrr))
+      .addDef(AmountReg)
+      .addUse(AmountReg, RegState::Kill)
+      .addUse(Scott8::TmpReg, RegState::Kill);
+  BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::CLF));
+  BuildMI(*MBB_Begin, MI, DL, TII->get(isLeft ? Scott8::SHL : Scott8::SHR))
+      .addDef(DestReg)
+      .addUse(DestReg, RegState::Kill);
+  auto jz_End2 = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JCC));
+      //completed later
+  auto jmp = BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::JMP))
+      .addMBB(MBB_Begin);
+  auto MBB_End = MBB_Begin->splitAt(*jmp, true);
+  BuildMI(*MBB_End, MI, DL, TII->get(Scott8::CLF));
+
+  jz_End.addMBB(MBB_End).addImm(0b0001); //opcode for zero
+  jz_End2.addMBB(MBB_End).addImm(0b0001);
+
+  MBB_Begin->setLabelMustBeEmitted();
+  MBB_End->setLabelMustBeEmitted();
+
+  MI->eraseFromParent();
+
   return true;
 }
 
