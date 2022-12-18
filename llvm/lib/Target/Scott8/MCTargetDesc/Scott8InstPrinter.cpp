@@ -64,24 +64,4 @@ void Scott8InstPrinter::printCCOperand(const MCInst *MI, unsigned OpNo, const MC
   if (CC & Scott8CC::COND_A) O << "A";
   if (CC & Scott8CC::COND_E) O << "E";
   if (CC & Scott8CC::COND_Z) O << "Z";
-
-  // switch (CC) {
-  //   default:
-  //     llvm_unreachable("Unsupported CC code");
-  //   case Scott8CC::COND_A:
-  //     O<< "A";
-  //     break;
-  //   case Scott8CC::COND_C:
-  //     O<< "C";
-  //     break;
-  //   case Scott8CC::COND_E:
-  //     O<< "E";
-  //     break;
-  //   case Scott8CC::COND_Z:
-  //     O<< "Z";
-  //     break;
-  //   case Scott8CC::COND_AE:
-  //     O<< "AE";
-  //     break;
-  // }
 }
