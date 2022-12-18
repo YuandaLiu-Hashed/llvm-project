@@ -138,6 +138,7 @@ bool Scott8RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       return true;
     break;
   }
+  return false;
 }
 
 Register Scott8RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
