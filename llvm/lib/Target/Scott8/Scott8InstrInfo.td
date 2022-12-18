@@ -92,7 +92,9 @@ let Defs = [FR], isCommutable = 1, Constraints = "$sourceReg2 = $destReg" in {
   defm OR         : ALU<0b1101, "OR",  or>;
   defm XOR        : ALU<0b1110, "XOR", xor>;
 
-  def NOTrr : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2), "NOT\t$sourceReg2", [(set GPRegs:$destReg, (not GPRegs:$sourceReg2)), (implicit FR)]> {
+  def NOTrr : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2), 
+              "NOT\t$sourceReg2", 
+              [(set GPRegs:$destReg, (not GPRegs:$sourceReg2)), (implicit FR)]> {
     bits<2> destReg;
     bits<2> sourceReg2;
     let Inst{1-0} = destReg;
@@ -105,8 +107,10 @@ let Defs = [FR], isCommutable = 1, Constraints = "$sourceReg2 = $destReg" in {
 // Shift Instructions
 //===----------------------------------------------------------------------===//
 
-let Defs = [FR], Constraints = "$sourceReg = $destReg" in {
-  def SHL : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg), "SHL\t$destReg", [(set GPRegs:$destReg, (shl GPRegs:$sourceReg, 1)), (implicit FR)]> {
+let Defs = [FR] /*Constraints = "$sourceReg = $destReg"*/ in {
+  def SHL : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg), 
+            "SHL\t$sourceReg, $destReg", 
+            [(set GPRegs:$destReg, (shl GPRegs:$sourceReg, 1)), (implicit FR)]> {
     bits<2> destReg;
     bits<2> sourceReg;
     let Inst{1-0} = destReg;
@@ -114,7 +118,9 @@ let Defs = [FR], Constraints = "$sourceReg = $destReg" in {
     let Inst{7-4} = 0b1010;
   }
 
-  def SHR : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg), "SHR\t$destReg", [(set GPRegs:$destReg, (srl GPRegs:$sourceReg, 1)), (implicit FR)]> {
+  def SHR : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg), 
+            "SHR\t$sourceReg, $destReg", 
+            [(set GPRegs:$destReg, (srl GPRegs:$sourceReg, 1)), (implicit FR)]> {
     bits<2> destReg;
     bits<2> sourceReg;
     let Inst{1-0} = destReg;
@@ -128,9 +134,9 @@ let Defs = [FR], Constraints = "$sourceReg = $destReg" in {
 //===----------------------------------------------------------------------===//
 
 let isAsCheapAsAMove = 1 in {
-  def CPYri  : InstScott8Double<(outs GPRegs:$destReg), (ins Immediate8:$const),
-                      "DATA\t$destReg, $const",
-                      [(set GPRegs:$destReg, Immediate8:$const)]> {
+  def CPYri : InstScott8Double<(outs GPRegs:$destReg), (ins Immediate8:$const),
+              "DATA\t$destReg, $const",
+              [(set GPRegs:$destReg, Immediate8:$const)]> {
     bits<2> destReg;
     bits<8> const;
     let Inst{5} = 0b1;
@@ -139,13 +145,14 @@ let isAsCheapAsAMove = 1 in {
   }
 } // isAsCheapAsAMove = 1
 
-
 //===----------------------------------------------------------------------===//
 // Comparison Instructions
 //===----------------------------------------------------------------------===//
 
 let Defs = [FR] in {
-  def CMPrr : InstScott8<(outs), (ins GPRegs:$reg1, GPRegs:$reg2), "CMP\t$reg1, $reg2", [(Scott8Cmp GPRegs:$reg1, GPRegs:$reg2), (implicit FR)]> {
+  def CMPrr : InstScott8<(outs), (ins GPRegs:$reg1, GPRegs:$reg2), 
+              "CMP\t$reg1, $reg2", 
+              [(Scott8Cmp GPRegs:$reg1, GPRegs:$reg2), (implicit FR)]> {
     bits<2> reg1;
     bits<2> reg2;
     let Inst{1-0} = reg2;
@@ -164,14 +171,18 @@ let hasSideEffects = 1, Defs = [FR] in {
 // Load/Store Instructions
 //===----------------------------------------------------------------------===//
 
-def LD : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$addr), "LOAD\t$addr, $destReg", [(set GPRegs:$destReg, (load addr:$addr))]> {
+def LD : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$addr), 
+         "LOAD\t$addr, $destReg", 
+         [(set GPRegs:$destReg, (load addr:$addr))]> {
   bits<2> destReg;
   bits<8> addr;
   let Inst{3-2} = addr{1-0};
   let Inst{1-0} = destReg;
 }
 
-def ST : InstScott8<(outs), (ins GPRegs:$regToStore, GPRegs:$addr), "STORE\t$addr, $regToStore", [(store GPRegs:$regToStore, addr:$addr)]> {
+def ST : InstScott8<(outs), (ins GPRegs:$regToStore, GPRegs:$addr), 
+         "STORE\t$addr, $regToStore", 
+         [(store GPRegs:$regToStore, addr:$addr)]> {
   bits<2> regToStore;
   bits<8> addr;
   let Inst{4} = 0b1;
@@ -185,7 +196,9 @@ def ST : InstScott8<(outs), (ins GPRegs:$regToStore, GPRegs:$addr), "STORE\t$add
 
 // Unconditional jump
 let isBranch = 1, isTerminator = 1, isBarrier = 1 in {
-  def JMP : InstScott8Double<(outs), (ins JmpTarget:$addr), "JMP\t$addr", [(br bb:$addr)]> {
+  def JMP : InstScott8Double<(outs), (ins JmpTarget:$addr), 
+            "JMP\t$addr", 
+            [(br bb:$addr)]> {
     bits<8> addr;
     //76543210
     //01000000
@@ -194,7 +207,9 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in {
   }
 
   let isIndirectBranch = 1 in {
-    def JMPrr : InstScott8<(outs), (ins GPRegs:$targetReg), "JMPR\t$targetReg", [(brind GPRegs:$targetReg)]> {
+    def JMPrr : InstScott8<(outs), (ins GPRegs:$targetReg), 
+                "JMPR\t$targetReg", 
+                [(brind GPRegs:$targetReg)]> {
       bits<2> targetReg;
       //76543210
       //011000XX
@@ -207,7 +222,8 @@ let isBranch = 1, isTerminator = 1, isBarrier = 1 in {
 // Conditional jump
 let isBranch = 1, isTerminator = 1, Uses=[FR] in {
   def JCC : InstScott8Double<(outs), (ins JmpTarget:$addr, ConditionCode:$condition),
-                        "J$condition\t$addr", [(Scott8Brcc bb:$addr, imm:$condition)]> {
+            "J$condition\t$addr", 
+            [(Scott8Brcc bb:$addr, imm:$condition)]> {
     bits<8> addr;
     bits<4> condition;
     //76543210
@@ -255,16 +271,9 @@ let Constraints = "$sourceReg2 = $destReg", Defs = [FR] in {
   }
 
   def UMUL_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
-                   "# UMUL\t$sourceReg, $destReg",
-                   [(set GPRegs:$destReg, (mul GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
+                    "# UMUL\t$sourceReg, $destReg",
+                    [(set GPRegs:$destReg, (mul GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
   }
-
-  // def UDIV_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
-  //                  "# UDIV\t$sourceReg, $destReg",
-  //                  [(set GPRegs:$destReg, (mul GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
-  // }
-
-  // def 
 }
 
 //===----------------------------------------------------------------------===//
@@ -300,19 +309,25 @@ let Constraints = "$sourceReg2 = $destReg", Defs = [FR] in {
 //===----------------------------------------------------------------------===//
 
 let hasSideEffects = 1 in {
-  def IO_DATA_IN : InstScott8<(outs GPRegs:$destReg), (ins), "IN\tData, $destReg", [(set GPRegs:$destReg, Scott8IoDataIn)]> {
+  def IO_DATA_IN : InstScott8<(outs GPRegs:$destReg), (ins), 
+                   "IN\tData, $destReg", 
+                   [(set GPRegs:$destReg, Scott8IoDataIn)]> {
     bits<2> destReg;
     let Inst{6-4} = 0b111;
     let Inst{1-0} = destReg;
   }
 
-  def IO_DATA_OUT : InstScott8<(outs), (ins GPRegs:$regToOut), "OUT\tData, $regToOut", [(Scott8IoDataOut GPRegs:$regToOut)]> {
+  def IO_DATA_OUT : InstScott8<(outs), (ins GPRegs:$regToOut), 
+                    "OUT\tData, $regToOut", 
+                    [(Scott8IoDataOut GPRegs:$regToOut)]> {
     bits<2> regToOut;
     let Inst{6-3} = 0b1111;
     let Inst{1-0} = regToOut;
   }
 
-  def IO_ADDRESS_OUT : InstScott8<(outs), (ins GPRegs:$regToOut), "OUT\tAddr, $regToOut", [(Scott8IoAddressOut GPRegs:$regToOut)]> {
+  def IO_ADDRESS_OUT : InstScott8<(outs), (ins GPRegs:$regToOut), 
+                       "OUT\tAddr, $regToOut", 
+                       [(Scott8IoAddressOut GPRegs:$regToOut)]> {
     bits<2> regToOut;
     let Inst{6-2} = 0b11111;
     let Inst{1-0} = regToOut;
