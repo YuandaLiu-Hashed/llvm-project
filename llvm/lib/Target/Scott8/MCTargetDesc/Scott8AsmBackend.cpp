@@ -86,12 +86,9 @@ void Scott8AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
   }
 
   // Address offset to make adjustments to.
-  // Simply store 2 bytes of the value.
-  //YL EDIT: Only One Byte
   unsigned Offset = Fixup.getOffset();
   Data[Offset] = Value & 0xFF;
-  // Data[Offset + 1] = uint8_t((Value >> 8) & 0xFF);
-
+  
   return;
 }
 
