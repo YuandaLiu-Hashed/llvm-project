@@ -264,7 +264,7 @@ let Uses = [SP], isTerminator = 1, isReturn = 1, isBarrier = 1 in {
 // Arithmatics Psudos
 //===----------------------------------------------------------------------===//
 
-let Constraints = "$sourceReg2 = $destReg", Defs = [FR] in {
+let Constraints = "$sourceReg2 = $destReg,@earlyclobber $destReg", Defs = [FR] in {
   def SUB_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
                    "# SUB\t$sourceReg, $destReg",
                    [(set GPRegs:$destReg, (sub GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR)]> {
@@ -292,7 +292,7 @@ let Defs = [FR] in {
   }
 }
 
-let Constraints = "$sourceReg2 = $destReg", Defs = [FR] in {
+let Constraints = "$sourceReg2 = $destReg,@earlyclobber $destReg", Defs = [FR] in {
   def SHLrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
                        "# SHLrr # shift $destReg by $sourceReg amount to the left.", 
                        [(set GPRegs:$destReg, (shl GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
