@@ -44,7 +44,7 @@ void Scott8FrameLowering::emitPrologue(MachineFunction &MF, MachineBasicBlock &M
 
   // Adjust the stack register.
   unsigned StackReg = Scott8::SP;
-  unsigned OffsetReg = Scott8::TmpReg;
+  unsigned OffsetReg = Scott8::R2;
 
   BuildMI(MBB, MBBI, dl, TII.get(Scott8::CPYri), OffsetReg)
     .addImm(-StackSize);
@@ -68,7 +68,7 @@ void Scott8FrameLowering::emitEpilogue(MachineFunction &MF, MachineBasicBlock &M
 
   // Restore the stack register to what it was at the beginning of the function.
   unsigned StackReg = Scott8::SP;
-  unsigned OffsetReg = Scott8::TmpReg;
+  unsigned OffsetReg = Scott8::R2;
 
   BuildMI(MBB, MBBI, dl, TII.get(Scott8::CPYri), OffsetReg)
     .addImm(StackSize);

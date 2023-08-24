@@ -1,136 +1,11 @@
 #include "Scott8TargetMachine.h"
 #include "Scott8.h"
-// #include "Scott8TargetObjectFile.h"
 #include "TargetInfo/Scott8TargetInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
 
-#include <iostream>
-
 using namespace llvm;
-
-//===----------------------------------------------------------------------===//
-// Bundle Cmp Jcc Pass
-//===----------------------------------------------------------------------===//
-class BundleCmpJccPass : public MachineFunctionPass {
-public:
-  BundleCmpJccPass() : MachineFunctionPass(ID) {}
-
-  StringRef getPassName() const override { return "Bundle CMP with JCC Pass"; }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-private:
-  static char ID;
-};
-
-bool BundleCmpJccPass::runOnMachineFunction(MachineFunction &MF) {
-  bool BundledCmp = false;
-
-  for (auto &MBB : MF) {
-    // Glueing CMP to JCC (at DAG stage) is not enough to keep them together.
-    // They need stronger bonds so that only death can separate them.
-    // For some reason spilled reg loads get in the way between them (reg loads require ADD that messes up the flags register).
-    //
-    // I'll need to look into it as it should not happen (ADD has Defs=[FR]).
-    // Probably this happens because the expansion of reg loads happens too late (during TargetFrameIndex elimination?).
-    //
-    // So bundling them looks like a hack, but seems to work.
-    MachineBasicBlock::iterator MBBI = MBB.begin(), E = MBB.end();
-    while (MBBI != E) {
-      MachineBasicBlock::iterator NMBBI = std::next(MBBI);
-      switch (MBBI->getOpcode()) {
-      case Scott8::CMPrr:
-        assert(NMBBI->getOpcode() == Scott8::JCC && "JCC should immediately follow CMP");
-        NMBBI->bundleWithPred();
-        BundledCmp = true;
-        break;
-      }
-      MBBI = NMBBI;
-    }
-  }
-  return BundledCmp;
-}
-
-char BundleCmpJccPass::ID = 0;
-
-//===----------------------------------------------------------------------===//
-// Insert CLF Pass
-//===----------------------------------------------------------------------===//
-class InsertClfPass : public MachineFunctionPass {
-public:
-  InsertClfPass() : MachineFunctionPass(ID) {}
-
-  StringRef getPassName() const override { return "Insert CLF instruction pass"; }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-private:
-  static char ID;
-};
-
-bool InsertClfPass::runOnMachineFunction(MachineFunction &MF) {
-  const Scott8Subtarget *STI = &MF.getSubtarget<Scott8Subtarget>();
-  const Scott8InstrInfo *TII = STI->getInstrInfo();
-  bool InsertedClf = false;
-
-  for (auto &MBB : MF) {
-    MachineBasicBlock::iterator MBBI = MBB.begin(), E = MBB.end();
-    
-    while (MBBI != E) {
-      switch (MBBI->getOpcode()) {
-      // Insert CLF before CMP.
-      case Scott8::CMPrr:
-        BuildMI(MBB, MBBI, DebugLoc(), TII->get(Scott8::CLF));
-        InsertedClf = true;
-        break;
-      // Insert CLF after ADDrr, SHL, SHR.
-      case Scott8::ADDrr:
-      case Scott8::SHL:
-      case Scott8::SHR:
-        BuildMI(MBB, std::next(MBBI), DebugLoc(), TII->get(Scott8::CLF));
-        InsertedClf = true;
-        break;
-      }
-      MBBI = std::next(MBBI);
-    }
-  }
-  return InsertedClf;
-}
-
-char InsertClfPass::ID = 0;
-
-
-//===----------------------------------------------------------------------===//
-// Insert Initial Stack State Pass
-//===----------------------------------------------------------------------===//
-//Insert value 0xFF onto the stack at the first instruction of program execution.
-
-class InsertInitialStackStatePass : public MachineFunctionPass {
-public:
-  InsertInitialStackStatePass() : MachineFunctionPass(ID) {}
-
-  StringRef getPassName() const override { return "Insert Initial Stack State Pass"; }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-private:
-  static char ID;
-};
-
-bool InsertInitialStackStatePass::runOnMachineFunction(MachineFunction &MF) {
-  if (MF.size() <= 0) return false;
-  if (MF.getName() != "main") return false;
-  const Scott8Subtarget *STI = &MF.getSubtarget<Scott8Subtarget>();
-  const Scott8InstrInfo *TII = STI->getInstrInfo();
-  DebugLoc DL;
-
-  auto &MBB = MF.front();
-
-  BuildMI(MBB, MBB.begin(), DL, TII->get(Scott8::CPYri)).addReg(Scott8::SP).addImm(0xFF);
-
-  return true;
-}
-
-char InsertInitialStackStatePass::ID = 0;
 
 //===----------------------------------------------------------------------===//
 // Expand PostRA Psudo 
@@ -207,24 +82,30 @@ bool ExpandPostRAPsudoPass::expandSub(MachineInstr *MI, const Scott8InstrInfo *T
   DebugLoc DL;
 
   const MachineOperand &Minuend = MI->getOperand(0);
-  const MachineOperand &Subtrahend = MI->getOperand(2);
+  const MachineOperand &Subtrahend = MI->getOperand(3);
+  const Register TmpReg = MI->getOperand(1).getReg();
 
   BuildMI(*MBB, MI, DL, TII->get(Scott8::CPYri))
-      .addReg(Scott8::TmpReg)
+      .addReg(TmpReg)
       .addImm(1);
   BuildMI(*MBB, MI, DL, TII->get(Scott8::NOTrr))
       .addDef(Subtrahend.getReg())
       .addUse(Subtrahend.getReg(), RegState::Kill);
   BuildMI(*MBB, MI, DL, TII->get(Scott8::ADDrr))
-      .addDef(Scott8::TmpReg)
-      .addUse(Scott8::TmpReg, RegState::Kill)
+      .addDef(TmpReg)
+      .addUse(TmpReg, RegState::Kill)
       .addUse(Subtrahend.getReg(), RegState::Kill);
   BuildMI(*MBB, MI, DL, TII->get(Scott8::CLF));
   BuildMI(*MBB, MI, DL, TII->get(Scott8::ADDrr))
       .addDef(Minuend.getReg())
       .addUse(Minuend.getReg(), RegState::Kill)
-      .addUse(Scott8::TmpReg, RegState::Kill);
+      .addUse(TmpReg, RegState::Kill);
   BuildMI(*MBB, MI, DL, TII->get(Scott8::CLF));
+
+  BuildMI(*MBB, MI, DL, TII->get(Scott8::XORrr))
+      .addDef(TmpReg)
+      .addUse(TmpReg, RegState::Kill)
+      .addUse(TmpReg, RegState::Kill);
 
   if (!Subtrahend.isKill()) {
     BuildMI(*MBB, MI, DL, TII->get(Scott8::NOTrr))
@@ -242,8 +123,9 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   MachineBasicBlock *MBB = MI->getParent();
   DebugLoc DL;
 
-  const MachineOperand &Lhs = MI->getOperand(2);
+  const MachineOperand &Lhs = MI->getOperand(3);
   const MachineOperand &Rhs = MI->getOperand(0);
+  const Register TmpReg = MI->getOperand(1).getReg();
 
   //Shift RHS to the right by one
   //if overflow
@@ -274,9 +156,9 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   //END STATE: LHS (unknown) | RHS (input 2) | TMP (output)
 
   auto clrTmp = BuildMI(*MBB, MI, DL, TII->get(Scott8::XORrr))
-      .addDef(Scott8::TmpReg)
-      .addUse(Scott8::TmpReg, RegState::Kill)
-      .addUse(Scott8::TmpReg, RegState::Kill);
+      .addDef(TmpReg)
+      .addUse(TmpReg, RegState::Kill)
+      .addUse(TmpReg, RegState::Kill);
   auto MBB_Begin = MBB->splitAt(*clrTmp, true);
   BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::SHR))
       .addDef(Rhs.getReg())
@@ -291,8 +173,8 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   auto MBB_A = MBB_Begin->splitAt(*jmp_B, true);
   BuildMI(*MBB_A, MI, DL, TII->get(Scott8::CLF));
   auto add1 = BuildMI(*MBB_A, MI, DL, TII->get(Scott8::ADDrr))
-      .addDef(Scott8::TmpReg)
-      .addUse(Scott8::TmpReg, RegState::Kill)
+      .addDef(TmpReg)
+      .addUse(TmpReg, RegState::Kill)
       .addUse(Lhs.getReg(), RegState::Kill);
   auto MBB_B = MBB_A->splitAt(*add1, true);
   BuildMI(*MBB_B, MI, DL, TII->get(Scott8::SHL))
@@ -307,7 +189,12 @@ bool ExpandPostRAPsudoPass::expandUMul(MachineInstr *MI, const Scott8InstrInfo *
   BuildMI(*MBB_End, MI, DL, TII->get(Scott8::ORrr))
       .addDef(Rhs.getReg())
       .addUse(Rhs.getReg(), RegState::Kill)
-      .addUse(Scott8::TmpReg, RegState::Kill);
+      .addUse(TmpReg, RegState::Kill);
+
+  BuildMI(*MBB_End, MI, DL, TII->get(Scott8::XORrr))
+      .addDef(TmpReg)
+      .addUse(TmpReg, RegState::Kill)
+      .addUse(TmpReg, RegState::Kill);
 
   //don't need to kill Rhs register, as it will be zero anyways.
 
@@ -363,8 +250,9 @@ bool ExpandPostRAPsudoPass::expandShiftRR(MachineInstr *MI, const Scott8InstrInf
   MachineBasicBlock *MBB = MI->getParent();
   DebugLoc DL;
 
-  const int AmountReg = MI->getOperand(2).getReg();
+  const Register AmountReg = MI->getOperand(3).getReg();
   const Register DestReg = MI->getOperand(0).getReg();
+  const Register TmpReg = MI->getOperand(1).getReg();
 
   //  DATA Tmp, -1
   //Begin:
@@ -379,7 +267,7 @@ bool ExpandPostRAPsudoPass::expandShiftRR(MachineInstr *MI, const Scott8InstrInf
   //  CLF
 
   auto loadNeg1 = BuildMI(*MBB, MI, DL, TII->get(Scott8::CPYri))
-      .addReg(Scott8::TmpReg)
+      .addReg(TmpReg)
       .addImm(0xFF); //this is -1
   auto MBB_Begin = MBB->splitAt(*loadNeg1, true);
   BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::ORrr))
@@ -391,7 +279,7 @@ bool ExpandPostRAPsudoPass::expandShiftRR(MachineInstr *MI, const Scott8InstrInf
   BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::ADDrr))
       .addDef(AmountReg)
       .addUse(AmountReg, RegState::Kill)
-      .addUse(Scott8::TmpReg, RegState::Kill);
+      .addUse(TmpReg, RegState::Kill);
   BuildMI(*MBB_Begin, MI, DL, TII->get(Scott8::CLF));
   BuildMI(*MBB_Begin, MI, DL, TII->get(isLeft ? Scott8::SHL : Scott8::SHR))
       .addDef(DestReg)
@@ -402,6 +290,11 @@ bool ExpandPostRAPsudoPass::expandShiftRR(MachineInstr *MI, const Scott8InstrInf
       .addMBB(MBB_Begin);
   auto MBB_End = MBB_Begin->splitAt(*jmp, true);
   BuildMI(*MBB_End, MI, DL, TII->get(Scott8::CLF));
+
+  BuildMI(*MBB_End, MI, DL, TII->get(Scott8::XORrr))
+      .addDef(TmpReg)
+      .addUse(TmpReg, RegState::Kill)
+      .addUse(TmpReg, RegState::Kill);
 
   jz_End.addMBB(MBB_End).addImm(0b0001); //opcode for zero
   jz_End2.addMBB(MBB_End).addImm(0b0001);
@@ -416,13 +309,8 @@ bool ExpandPostRAPsudoPass::expandShiftRR(MachineInstr *MI, const Scott8InstrInf
 
 char ExpandPostRAPsudoPass::ID = 0;
 
-//===----------------------------------------------------------------------===//
-
 namespace llvm {
 
-FunctionPass *createBundleCmpJccPass() { return new BundleCmpJccPass(); }
-FunctionPass *createInsertClfPass() { return new InsertClfPass(); }
-FunctionPass *createInsertInitialStackStatePass() { return new InsertInitialStackStatePass(); }
 FunctionPass *createExpandPostRAPseudoPass() { return new ExpandPostRAPsudoPass(); }
 
 } // end of namespace llvm

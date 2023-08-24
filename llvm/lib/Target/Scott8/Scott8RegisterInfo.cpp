@@ -72,20 +72,31 @@ void Scott8RegisterInfo::eliminateFrameIndexInStore(MachineBasicBlock::iterator 
 {
   MachineInstr &MI = *II;
   MachineFunction &MF = *MI.getParent()->getParent();
+  // MachineRegisterInfo &MRI = MF.getRegInfo();
   MachineBasicBlock &MBB = *MI.getParent();
-  Register RegisterToStore = MI.getOperand(0).getReg();
+  Register RegisterToStore = MI.getOperand(1).getReg();
+  Register ScrachReg = MI.getOperand(0).getReg();
   Register FrameReg = getFrameRegister(MF);
   const Scott8InstrInfo *TII = MF.getSubtarget<Scott8Subtarget>().getInstrInfo();
 
-  BuildMI(MBB, II, DebugLoc(), TII->get(Scott8::CPYri), Scott8::TmpReg)
+  DebugLoc DL = DebugLoc();
+
+  BuildMI(MBB, II, DL, TII->get(Scott8::CPYri), ScrachReg)
     .addImm(Offset);
 
-  BuildMI(MBB, II, DebugLoc(), TII->get(Scott8::NO_CLF_ADDrr), Scott8::TmpReg)
-    .addReg(Scott8::TmpReg)
+  BuildMI(MBB, II, DL, TII->get(Scott8::NO_CLF_ADDrr), ScrachReg)
+    .addReg(ScrachReg)
     .addReg(FrameReg);
 
-  MI.getOperand(0).setReg(RegisterToStore);
-  MI.getOperand(FIOperandNum).ChangeToRegister(Scott8::TmpReg, false, false, true);
+  auto clear = BuildMI(MBB, II, DL, TII->get(Scott8::XORrr), ScrachReg)
+    .addReg(ScrachReg)
+    .addReg(ScrachReg);
+
+  MI.getOperand(1).setReg(RegisterToStore);
+  MI.getOperand(FIOperandNum)
+    .ChangeToRegister(ScrachReg, false, false, true);
+  
+  MI.moveBefore(clear);
 }
 
 void Scott8RegisterInfo::eliminateFrameIndexInLoad(MachineBasicBlock::iterator II, unsigned FIOperandNum, int Offset) const
@@ -129,7 +140,7 @@ bool Scott8RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       eliminateFrameIndexInAdd(II, FIOperandNum, Offset);
       return true;
     break;
-    case Scott8::ST:
+    case Scott8::STstack:
       eliminateFrameIndexInStore(II, FIOperandNum, Offset);
       return true;
     break;

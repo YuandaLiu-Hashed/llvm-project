@@ -129,11 +129,17 @@ void Scott8InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 }
 
 void Scott8InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
-                                          MachineBasicBlock::iterator MI,
+                                          MachineBasicBlock::iterator MII,
                                           Register SrcReg, bool isKill, int FI,
                                           const TargetRegisterClass *RC,
                                           const TargetRegisterInfo *TRI) const {
-  BuildMI(MBB, MI, DebugLoc(), get(Scott8::ST))
+  MachineInstr &MI = *MII;
+  MachineFunction &MF = *MI.getParent()->getParent();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  // Emit a special psudo-instruction of store that clog a register for temporary arithmatic
+  Register scratchReg = MRI.createVirtualRegister(&Scott8::NonStackGPRegsRegClass);
+  BuildMI(MBB, MI, DebugLoc(), get(Scott8::STstack), scratchReg)
       .addReg(SrcReg, getKillRegState(isKill))
       .addFrameIndex(FI);
 }

@@ -25,7 +25,10 @@ add_llvm_target(Scott8CodeGen
   Scott8TargetMachine.cpp
   Scott8MCInstLower.cpp
   Scott8TargetObjectFile.cpp
-  Scott8Passes.cpp
+  Scott8Pass_BundleJcc.cpp
+  Scott8Pass_ExpandPostRAPsudo.cpp
+  Scott8Pass_InsertCLF.cpp
+  Scott8Pass_InsertInitialStackState.cpp
 
   LINK_COMPONENTS
   AsmPrinter 

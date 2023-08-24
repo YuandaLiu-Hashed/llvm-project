@@ -72,16 +72,16 @@ void Scott8AsmPrinter::expandCallInstruction(const MachineInstr *MI) {
   MCInstLowering.Lower(MI, TmpInst);
 
   // Address that SP points to will contain the return address.
-  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::CPYri).addReg(Scott8::TmpReg).addExpr(RetExpr));
-  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::ST).addReg(Scott8::TmpReg).addReg(Scott8::SP));
+  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::CPYri).addReg(Scott8::R2).addExpr(RetExpr));
+  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::ST).addReg(Scott8::R2).addReg(Scott8::SP));
   EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::JMP).addOperand(TmpInst.getOperand(0)));
   OutStreamer->emitLabel(RetSymbol);
 }
 
 void Scott8AsmPrinter::expandRetInstruction() {
   // Load return address to the temp reg and jump to it.
-  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::LD).addReg(Scott8::TmpReg).addReg(Scott8::SP));
-  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::JMPrr).addReg(Scott8::TmpReg));
+  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::LD).addReg(Scott8::R2).addReg(Scott8::SP));
+  EmitToStreamer(*OutStreamer, MCInstBuilder(Scott8::JMPrr).addReg(Scott8::R2));
 }
 
 void Scott8AsmPrinter::emitInstruction(const MachineInstr *MI) {

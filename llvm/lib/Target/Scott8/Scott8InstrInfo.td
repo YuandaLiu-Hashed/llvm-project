@@ -180,7 +180,7 @@ def LD : InstScott8<(outs GPRegs:$destReg), (ins GPRegs:$addr),
   let Inst{1-0} = destReg;
 }
 
-def ST : InstScott8<(outs), (ins GPRegs:$regToStore, GPRegs:$addr), 
+def ST : InstScott8<(outs), (ins GPRegs:$regToStore, NonStackGPRegs:$addr), 
          "STORE\t$addr, $regToStore", 
          [(store GPRegs:$regToStore, addr:$addr)]> {
   bits<2> regToStore;
@@ -188,6 +188,22 @@ def ST : InstScott8<(outs), (ins GPRegs:$regToStore, GPRegs:$addr),
   let Inst{4} = 0b1;
   let Inst{3-2} = addr{1-0};
   let Inst{1-0} = regToStore;
+}
+
+// This is a special instruction just for storing on the stack. 
+// It is identical to the ST instruction, but leaves a temporary register
+// for `eliminatingFrameIndexOnStore`. This instruction is selected only by
+// `storeRegToStackSlot` in Scott8InstrInfo.
+let Constraints = "@earlyclobber $tmp" in {
+  def STstack : InstScott8<(outs GPRegs:$tmp), (ins GPRegs:$regToStore, StackGPRegs:$addr), 
+                "STORE \t$addr, $regToStore //stack store with tmp $tmp", 
+                [(store GPRegs:$regToStore, addr:$addr), (set GPRegs:$tmp, 0)]> {
+    bits<2> regToStore;
+    bits<8> addr;
+    let Inst{4} = 0b1;
+    let Inst{3-2} = addr{1-0};
+    let Inst{1-0} = regToStore;
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -264,15 +280,17 @@ let Uses = [SP], isTerminator = 1, isReturn = 1, isBarrier = 1 in {
 // Arithmatics Psudos
 //===----------------------------------------------------------------------===//
 
-let Constraints = "$sourceReg2 = $destReg,@earlyclobber $destReg", Defs = [FR] in {
-  def SUB_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
-                   "# SUB\t$sourceReg, $destReg",
-                   [(set GPRegs:$destReg, (sub GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR)]> {
+let Constraints = "$sourceReg2 = $destReg,@earlyclobber $destReg,@earlyclobber $tmp", Defs = [FR], Uses = [FR] in {
+  def SUB_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg, GPRegs:$tmp), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
+                   "# SUB\t$sourceReg, $destReg, temporary $tmp",
+                   [(set GPRegs:$destReg, (sub GPRegs:$sourceReg2, GPRegs:$sourceReg)), 
+                   (implicit FR), (set GPRegs:$tmp, 0)]> {
   }
 
-  def UMUL_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
-                    "# UMUL\t$sourceReg, $destReg",
-                    [(set GPRegs:$destReg, (mul GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
+  def UMUL_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg, GPRegs:$tmp), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
+                    "# UMUL\t$sourceReg, $destReg, temporary $tmp",
+                    [(set GPRegs:$destReg, (mul GPRegs:$sourceReg2, GPRegs:$sourceReg)), 
+                    (implicit FR), (set GPRegs:$sourceReg), (set GPRegs:$tmp, 0)]> {
   }
 }
 
@@ -292,15 +310,17 @@ let Defs = [FR] in {
   }
 }
 
-let Constraints = "$sourceReg2 = $destReg,@earlyclobber $destReg", Defs = [FR] in {
-  def SHLrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
-                       "# SHLrr # shift $destReg by $sourceReg amount to the left.", 
-                       [(set GPRegs:$destReg, (shl GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
+let Constraints = "$sourceReg2 = $destReg,@earlyclobber $destReg,@earlyclobber $tmp", Defs = [FR] in {
+  def SHLrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg, GPRegs:$tmp), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
+                       "# SHLrr # shift $destReg by $sourceReg amount to the left, temporary $tmp", 
+                       [(set GPRegs:$destReg, (shl GPRegs:$sourceReg2, GPRegs:$sourceReg)), 
+                       (implicit FR), (set GPRegs:$sourceReg), (set GPRegs:$tmp, 0)]> {
   }
 
-  def SHRrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
-                       "# SHRrr # shift $destReg by $sourceReg amount to the right.", 
-                       [(set GPRegs:$destReg, (srl GPRegs:$sourceReg2, GPRegs:$sourceReg)), (implicit FR), (set GPRegs:$sourceReg)]> {
+  def SHRrr_PSEUDO : Scott8PseudoInst<(outs GPRegs:$destReg, GPRegs:$tmp), (ins GPRegs:$sourceReg2, GPRegs:$sourceReg),
+                       "# SHRrr # shift $destReg by $sourceReg amount to the right, temporary $tmp", 
+                       [(set GPRegs:$destReg, (srl GPRegs:$sourceReg2, GPRegs:$sourceReg)), 
+                       (implicit FR), (set GPRegs:$sourceReg), (set GPRegs:$tmp, 0)]> {
   }
 }
 
